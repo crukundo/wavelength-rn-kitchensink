@@ -1,0 +1,69 @@
+{
+  "name": "wavelength-rn-kitchensink",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.ts",
+  "packageManager": "bun@1.3.12",
+  "engines": {
+    "node": ">=22.0.0",
+    "bun": "1.3.12"
+  },
+  "scripts": {
+    "start": "expo start --dev-client",
+    "start:clear": "expo start --dev-client --clear",
+    "stage:android": "node scripts/stage-wavelength-native.mjs android",
+    "stage:ios": "node scripts/stage-wavelength-native.mjs ios",
+    "stage:native": "node scripts/stage-wavelength-native.mjs all",
+    "verify:native": "node scripts/verify-wavelength-native.mjs",
+    "clean:android": "bun run stage:android && expo prebuild --platform android --clean",
+    "clean:ios": "bun run stage:ios && LANG=en_US.UTF-8 expo prebuild --platform ios --clean",
+    "android": "bun run stage:android && expo run:android",
+    "ios": "bun run stage:ios && LANG=en_US.UTF-8 expo run:ios",
+    "typecheck": "tsc --noEmit",
+    "verify:architecture": "node scripts/verify-architecture.mjs",
+    "doctor": "expo-doctor",
+    "check": "bun run typecheck && bun run verify:architecture && bun run doctor"
+  },
+  "dependencies": {
+    "@expo-google-fonts/inter": "0.4.1",
+    "@expo-google-fonts/jetbrains-mono": "0.4.1",
+    "@expo-google-fonts/work-sans": "0.4.1",
+    "@lightninglabs/wavelength-react": "0.1.0",
+    "@lightninglabs/wavelength-react-native": "0.1.0",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "expo": "54.0.25",
+    "expo-build-properties": "1.0.10",
+    "expo-clipboard": "8.0.8",
+    "expo-dev-client": "6.0.21",
+    "expo-file-system": "19.0.23",
+    "expo-font": "14.0.12",
+    "expo-status-bar": "3.0.9",
+    "expo-system-ui": "6.0.9",
+    "lucide-react-native": "1.23.0",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-qrcode-svg": "6.3.21",
+    "react-native-safe-area-context": "5.6.2",
+    "react-native-svg": "15.12.1"
+  },
+  "devDependencies": {
+    "@types/react": "19.1.16",
+    "expo-doctor": "1.17.11",
+    "typescript": "5.9.2"
+  },
+  "expo": {
+    "install": {
+      "exclude": [
+        "expo",
+        "react",
+        "react-native",
+        "typescript"
+      ]
+    },
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "listUnknownPackages": false
+      }
+    }
+  }
+}

@@ -1,0 +1,13 @@
+node_modules/
+.expo/
+.cache/
+android/
+ios/
+dist/
+*.log
+*.tsbuildinfo
+.DS_Store
+
+# Wavelength native runtimes are downloaded and checksum-verified on demand.
+Wavewalletdk.aar
+Wavewalletdk.xcframework/

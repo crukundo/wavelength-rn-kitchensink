@@ -1,0 +1,34 @@
+{
+  "cli": {
+    "appVersionSource": "local"
+  },
+  "build": {
+    "base": {
+      "android": {
+        "image": "ubuntu-22.04-jdk-17-ndk-r26b",
+        "env": {
+          "GRADLE_OPTS": "-Dorg.gradle.jvmargs=-Xmx3072m -Dorg.gradle.parallel=true -Dorg.gradle.caching=true"
+        }
+      },
+      "ios": {
+        "image": "macos-sequoia-15.5-xcode-16.4",
+        "resourceClass": "medium",
+        "env": {
+          "LANG": "en_US.UTF-8"
+        }
+      }
+    },
+    "development": {
+      "extends": "base",
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "extends": "base",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    }
+  }
+}
