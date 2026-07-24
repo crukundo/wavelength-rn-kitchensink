@@ -12,6 +12,7 @@ import {
   Server,
   Settings as SettingsIcon,
   ShieldCheck,
+  Timer,
   Trash2,
   Wallet,
   Zap,
@@ -345,6 +346,27 @@ export function SettingsScreen({
       </Band>
 
       <Band>
+        <Label accent="orange" rule>
+          Diagnostics
+        </Label>
+        <Pressable
+          accessibilityLabel="Lock probe"
+          accessibilityRole="button"
+          onPress={() => onNavigate('lockprobe')}
+          style={styles.entry}
+        >
+          <Timer size={16} color={palette.muted} />
+          <View style={styles.entryBody}>
+            <Text style={styles.entryTitle}>Lock probe</Text>
+            <Text style={styles.entrySubtitle}>
+              Test L2 — can a round join block receive?
+            </Text>
+          </View>
+          <ChevronRight size={16} color={palette.muted} />
+        </Pressable>
+      </Band>
+
+      <Band tinted>
         <Label rule>Danger zone</Label>
         <Pressable
           accessibilityLabel="Emergency exit"

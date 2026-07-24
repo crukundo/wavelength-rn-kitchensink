@@ -86,6 +86,21 @@ Observed: a 500 sat BOLT11 send quoted on the credit rail on a wallet holding on
 
 Design implication. The rail is an output of the quote. No screen before the quote may promise one.
 
+## A client cannot ask for a round
+
+There is no refresh RPC. The whole client surface is `ready`, `start`, `stop`, `getInfo`, `status`, `balance`, `createWallet`, `unlockWallet`, `openWalletFromPasskey`, `deposit`, `receive`, `prepareSend`, `sendPrepared`, `send`, `list`, `exit`, `exitStatus`, `exitSummary`, `getExitPlan`, `sweepWallet`, `isRunning`, `subscribe`, `startActivity`, `stopActivity`, `dispose`. Source, `wavelength-core/dist/client.d.ts`.
+
+`useWalletRefresh` in the React package is not a VTXO refresh. It re-fetches info, balance and activity. Source, `wavelength-react/dist/hooks.d.ts:157`. Anyone testing round behaviour will reach for it first and measure nothing.
+
+Two client-startable operations do round work:
+
+- a cooperative exit. "A cooperative batch queues each outpoint into the next round", and again, "On the cooperative path it queues each outpoint into the next round". Source, `wavelength-core/dist/exit.d.ts:5` and `:86`. This is startable on demand, which makes it the only usable trigger for a timed test
+- boarding a deposit, which is gated on the operator's required confirmations and so cannot be timed
+
+The automatic refresh at the needs_refresh threshold fires on a block epoch near expiry and cannot be requested.
+
+Design implication. The wallet's own refresh schedule is unobservable and untriggerable from the client. A test that needs a round in flight must use a cooperative exit and accept that it is a different caller into the round machinery. See test L2 in [PAYMENT_TEST_FRAMEWORK.md](PAYMENT_TEST_FRAMEWORK.md).
+
 ## Credit
 
 The credit numbers are server-quoted, not computed locally. The client copies `creditTopupSat`, `creditAppliedSat`, `creditShortfallSat` and `arkFundingSat` straight out of the swap server's `QuotePay` response, and builds the warning string from them. Source, `swapwallet/router.go:777`.

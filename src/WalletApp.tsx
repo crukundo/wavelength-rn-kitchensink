@@ -38,6 +38,7 @@ import { ReceiveScreen } from './screens/receive/ReceiveScreen';
 import { SendScreen } from './screens/send/SendScreen';
 import { SettingsScreen } from './screens/settings/SettingsScreen';
 import { ExitScreen } from './screens/exit/ExitScreen';
+import { LockProbeScreen } from './screens/diagnostics/LockProbeScreen';
 
 // WalletApp is the wallet orchestrator: it owns cross-screen session state
 // (the connect form, recovery-phrase backup gating, wallet-kind persistence,
@@ -360,6 +361,7 @@ export function WalletApp() {
         />
       ) : null}
       {tab === 'exit' ? <ExitScreen onNavigate={setTab} /> : null}
+      {tab === 'lockprobe' ? <LockProbeScreen onNavigate={setTab} /> : null}
     </AppShell>
   );
 }

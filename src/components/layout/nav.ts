@@ -15,7 +15,8 @@ export type AppTab =
   | 'send'
   | 'activity'
   | 'settings'
-  | 'exit';
+  | 'exit'
+  | 'lockprobe';
 
 // NavAccent names a palette accent field usable as a nav destination's tint.
 export type NavAccent = 'violet' | 'teal' | 'sky' | 'orange';

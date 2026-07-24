@@ -37,6 +37,14 @@ The other killer: `wallet.maintenance()` waited on server rounds with no timeout
 
 Not yet verified for Wavelength. The codebase does bound several waits (`replayRoundRegisterTimeout`, the prepared-send TTL, poll caps), but I have not traced whether a round join can block receive. Test L2 below is the probe, and it is the highest-value test after L1.
 
+The harness now carries that probe, under Settings, Diagnostics. Three things it settled about how L2 has to be run.
+
+The SDK has no refresh RPC, so a round join cannot be requested. The only operation a client can start on demand that does round work is a cooperative exit, which "queues each outpoint into the next round" (`exit.d.ts:5`). That is the trigger, and it costs a VTXO per run: its value leaves Ark for the on-chain backing wallet.
+
+That carries a caveat which must travel with any result. The probe measures whether round work blocks receive, entering the round by the cooperative-exit path. The automatic refresh at the needs_refresh threshold is a different caller into what is probably the same machinery, and cannot be triggered. A clean run is evidence that receive is not serialised behind a round. It is not proof that the refresh path behaves identically.
+
+An earlier version of this test asked for invoices on Bob as well as Alice. Bob is a separate app container running a separate daemon with its own lock, so Bob's invoice creation cannot show anything about Alice's. It is still worth watching, but as a different question: Alice blocked means a client-side lock, the bark failure. Bob blocked at the same moment means operator-side contention, which is a separate and also serious problem.
+
 ## How Wavelength handles balances
 
 Your observation is correct and expected: the balance moves by more than you sent.
@@ -86,7 +94,7 @@ Every test names its pass condition in terms a non-expert can check. Record: dat
 | ID | Test | Pass condition |
 | --- | --- | --- |
 | L1 | Fund Bob, force-quit the app, leave it closed past the batch expiry window, reopen | Balance on reopen matches reality with no phantom spendable value, and the app states plainly what was lost. Measure how long after reopen the balance corrects — it is not necessarily instant. Get the window from a VTXO's `batchExpiry` minus `Info.blockHeight`, not from the operator terms, which do not carry it |
-| L2 | Start a round join on Alice, then immediately create an invoice on Bob and on Alice | Invoice creation succeeds on both within a few seconds. Any block longer than 30 seconds reproduces the bark failure |
+| L2 | Run the lock probe on Alice (Settings, Diagnostics). It takes 3 idle invoice timings, starts a cooperative exit to queue a VTXO into the next round, then times an invoice every 3 seconds for 90 seconds | Every call during the round completes in about the idle time. Any single call over 30 seconds, or any failure that did not occur idle, reproduces the bark failure |
 | L3 | Take the operator offline during a refresh window, keep the app open | The VTXO escalates to unilateral exit at the critical threshold rather than expiring. This is the behaviour that distinguishes Wavelength from bark |
 | L4 | Kill the app at each of: quote, dispatch, pending, settling | No duplicate payment, no lost entry, state reconciles on restart |
 | L5 | Wipe Bob, restore from mnemonic | Balance and history return. Record what cannot be reconstructed |
@@ -171,6 +179,7 @@ Verified in source, safe to build on:
 - the balance chain end to end: `ConfirmedSat` ← `GetVtxoBalanceSat()` ← `SumSpendableBalance(ListLiveVTXOs)`
 - `WalletVTXO` carrying `batchExpiry` and `relativeExpiry`, `Info` carrying `blockHeight`, and the app already reading the inventory via `list({ view: 'vtxos' })` (`src/screens/exit/ExitScreen.tsx:149`). The expiry-deadline mitigation is buildable today
 - the SDK's `ServerInfo` exposing only `freeRefreshWindowBlocks`
+- that no client RPC triggers a round, that `useWalletRefresh` is only a data re-fetch, and that a cooperative exit queues into the next round (`client.d.ts`, `hooks.d.ts:157`, `exit.d.ts:5`)
 - the 5 minute send-intent TTL and the deliberate burn on dispatch failure
 
 Observed once on signet, not generalisable:
