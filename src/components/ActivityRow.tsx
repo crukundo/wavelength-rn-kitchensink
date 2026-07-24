@@ -1,4 +1,4 @@
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import {
   Activity,
   ArrowDownLeft,
@@ -53,6 +53,9 @@ const makeStyles = (p: Palette) => ({
     flexDirection: 'row' as const,
     gap: 12,
     paddingVertical: 12,
+  },
+  pressed: {
+    backgroundColor: p.well,
   },
   iconBox: {
     alignItems: 'center' as const,
@@ -113,7 +116,17 @@ const makeStyles = (p: Palette) => ({
 // ActivityRow renders a single dense transaction line from an SDK Entry. The
 // counterparty is a bare string (pubkey / address / invoice), so the local
 // note is the title and a truncated counterparty is shown monospace beneath.
-export function ActivityRow({ entry }: { entry: Entry }) {
+//
+// Every field here is truncated to one line by design, so onPress opens the
+// full record (ActivityDetail). It is optional: a row rendered without a
+// handler stays inert rather than looking tappable and doing nothing.
+export function ActivityRow({
+  entry,
+  onPress,
+}: {
+  entry: Entry;
+  onPress?: (entry: Entry) => void;
+}) {
   const { palette } = useTheme();
   const styles = useThemedStyles(makeStyles);
   // The daemon uses one 'exit' kind for both a cooperative on-chain send (which
@@ -144,7 +157,13 @@ export function ActivityRow({ entry }: { entry: Entry }) {
   const statusBg = failed ? palette.badSoft : palette.warnSoft;
 
   return (
-    <View style={styles.row}>
+    <Pressable
+      onPress={onPress ? () => onPress(entry) : undefined}
+      disabled={!onPress}
+      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={onPress ? `${title}, view details` : undefined}
+    >
       <View style={styles.iconBox}>
         <Icon size={15} color={incoming ? palette.sky : palette.orange} />
       </View>
@@ -186,6 +205,6 @@ export function ActivityRow({ entry }: { entry: Entry }) {
           <Text style={styles.fee}>fee {formatSats(entry.feeSat)}</Text>
         ) : null}
       </View>
-    </View>
+    </Pressable>
   );
 }

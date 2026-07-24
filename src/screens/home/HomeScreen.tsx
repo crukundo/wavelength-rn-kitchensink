@@ -25,6 +25,7 @@ import {
   useWalletRefresh,
 } from '@lightninglabs/wavelength-react';
 import { ActivityRow } from '../../components/ActivityRow';
+import { ActivityDetail } from '../activity/ActivityDetail';
 import { PageHead } from '../../components/layout/PageHead';
 import { AppTab } from '../../components/layout/nav';
 import { Band } from '../../components/ui/Band';
@@ -623,6 +624,10 @@ function RecentActivityBand({
 }) {
   const { palette } = useTheme();
   const styles = useThemedStyles(makeStyles);
+  // Keyed by id for the same reason as ActivityScreen: a pending entry changes
+  // under the poll, so the sheet must re-read it rather than hold a snapshot.
+  const [openId, setOpenId] = useState<string | null>(null);
+  const openEntry = activity.find((entry) => entry.id === openId) ?? null;
 
   return (
     <Band tinted>
@@ -643,11 +648,15 @@ function RecentActivityBand({
         <View style={styles.list}>
           {activity.slice(0, 4).map((entry, i) => (
             <View key={entry.id} style={i > 0 && styles.listDivider}>
-              <ActivityRow entry={entry} />
+              <ActivityRow
+                entry={entry}
+                onPress={(selected) => setOpenId(selected.id)}
+              />
             </View>
           ))}
         </View>
       )}
+      <ActivityDetail entry={openEntry} onClose={() => setOpenId(null)} />
     </Band>
   );
 }

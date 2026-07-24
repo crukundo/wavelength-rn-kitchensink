@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import {
   Entry,
@@ -5,6 +6,7 @@ import {
   useWalletRefresh,
 } from '@lightninglabs/wavelength-react';
 import { ActivityRow } from '../../components/ActivityRow';
+import { ActivityDetail } from './ActivityDetail';
 import { PageHead } from '../../components/layout/PageHead';
 import { AppTab } from '../../components/layout/nav';
 import { Band } from '../../components/ui/Band';
@@ -69,6 +71,13 @@ export function ActivityScreen({
   const activity = useWalletActivity();
   const { refresh, refreshPending, refreshError } = useWalletRefresh();
   const groups = groupByDay(activity);
+  // Track the open entry by id, not by value: a pending entry keeps changing
+  // as the poll refreshes, and holding the object would freeze the sheet on the
+  // snapshot taken when it opened. Looking it up each render means an entry
+  // settling while the sheet is open updates in place, and one that disappears
+  // closes the sheet rather than showing a stale record.
+  const [openId, setOpenId] = useState<string | null>(null);
+  const openEntry = activity.find((entry) => entry.id === openId) ?? null;
 
   const onRefresh = () => {
     void refresh().catch(() => undefined);
@@ -109,13 +118,17 @@ export function ActivityScreen({
             <View style={styles.list}>
               {group.items.map((entry, i) => (
                 <View key={entry.id} style={i > 0 && styles.divider}>
-                  <ActivityRow entry={entry} />
+                  <ActivityRow
+                    entry={entry}
+                    onPress={(selected) => setOpenId(selected.id)}
+                  />
                 </View>
               ))}
             </View>
           </Band>
         ))
       )}
+      <ActivityDetail entry={openEntry} onClose={() => setOpenId(null)} />
     </ScrollView>
   );
 }

@@ -50,6 +50,30 @@ export function formatTimestamp(iso?: string): string {
   });
 }
 
+// formatTimestampFull renders an ISO timestamp at full precision, including
+// seconds and the date. The activity list shows the short form; the detail
+// sheet needs the exact instant, because the gap between two lifecycle updates
+// is often the only clue to why an entry stalled.
+export function formatTimestampFull(iso?: string): string {
+  if (!iso) {
+    return "";
+  }
+
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return iso;
+  }
+
+  return date.toLocaleString([], {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
 // dayLabel buckets an ISO timestamp into a human day heading (Today / Yesterday
 // / a short date), used to group the activity history.
 export function dayLabel(iso?: string): string {
