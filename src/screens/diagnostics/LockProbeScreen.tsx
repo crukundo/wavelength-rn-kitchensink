@@ -1,10 +1,11 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Check, Play, Square, X } from 'lucide-react-native';
 import {
   useWalletBalance,
   useWalletExitBatch,
   useWalletList,
+  useWalletLogs,
   useWalletReceive,
   useWalletRefresh,
 } from '@lightninglabs/wavelength-react';
@@ -82,6 +83,13 @@ type Sample = {
   ms: number;
   ok: boolean;
   detail: string;
+};
+
+type LogLine = {
+  /** Stamped on arrival: WavelengthLogPayload carries no time of its own. */
+  t: number;
+  level: string;
+  message: string;
 };
 
 type Phase = 'idle' | 'baseline' | 'probing' | 'done';
@@ -248,6 +256,70 @@ export function LockProbeScreen({
   const balanceRef = useRef(balance);
   balanceRef.current = balance;
 
+  // SDK-level log capture. Note what this is NOT: it carries nothing from the
+  // Go daemon. Every 'log' event the SDK emits is its own diagnostic — a
+  // throwing subscriber, an unparseable activity entry, a failed stream close,
+  // an unknown native event (wavelength-core base-client.js:123,
+  // wavelength-react-native client.js:86). The daemon's own logging, whatever
+  // debugLevel is set to, reaches neither this buffer nor os_log nor any file
+  // in its data directory, so it cannot be read from this harness at all.
+  //
+  // Still worth capturing: if a receive blocks for ten minutes and the SDK
+  // drops an activity entry or loses the stream in that window, this is the
+  // only place that would show. An empty capture is itself a result.
+  //
+  // The buffer is a 200-line tail (engine/constants.js MAX_LOGS) carrying no
+  // timestamps, so lines are stamped on arrival and copied out before they
+  // roll off.
+  const { logs } = useWalletLogs();
+  const logStoreRef = useRef<LogLine[]>([]);
+  const lastLogKeyRef = useRef<string | null>(null);
+  const logGapsRef = useRef(0);
+
+  useEffect(() => {
+    if (logs.length === 0) {
+      return;
+    }
+
+    const key = (l: { level: string; message: string }) =>
+      `${l.level} ${l.message}`;
+    const prev = lastLogKeyRef.current;
+    let from = 0;
+
+    if (prev !== null) {
+      // Find where the previously captured tail ends inside the new buffer.
+      // Searching from the back matters: a repeated message would otherwise
+      // match an older copy and re-capture everything after it.
+      let found = -1;
+      for (let i = logs.length - 1; i >= 0; i -= 1) {
+        if (key(logs[i]) === prev) {
+          found = i;
+          break;
+        }
+      }
+
+      if (found === -1) {
+        // The buffer rolled past everything we had. Lines were lost; record
+        // that rather than pretending the capture is continuous.
+        logGapsRef.current += 1;
+      } else {
+        from = found + 1;
+      }
+    }
+
+    if (from < logs.length) {
+      const now = Date.now();
+      for (let i = from; i < logs.length; i += 1) {
+        logStoreRef.current.push({
+          t: now,
+          level: logs[i].level,
+          message: logs[i].message,
+        });
+      }
+      lastLogKeyRef.current = key(logs[logs.length - 1]);
+    }
+  }, [logs]);
+
   const cfg = MODES[mode];
   const vtxos = listData?.vtxos?.vtxos ?? [];
   const running = phase === 'baseline' || phase === 'probing';
@@ -296,6 +368,9 @@ export function LockProbeScreen({
     setJoinNote('');
     setError('');
     setPhase('baseline');
+    logStoreRef.current = [];
+    logGapsRef.current = 0;
+    lastLogKeyRef.current = null;
 
     // Baseline: what does receive cost when nothing else is happening?
     for (let i = 0; i < BASELINE_SAMPLES && live(); i += 1) {
@@ -386,6 +461,24 @@ export function LockProbeScreen({
 
     setConfirm(true);
   };
+
+  // Publish the whole run on the global object so it can be pulled out of the
+  // JS runtime over the Metro debugger. A 15 minute run produces far more
+  // timing and log data than is readable by scrolling a phone screen, and
+  // reading it back as one JSON blob avoids transcription mistakes in the
+  // numbers that the evaluation then rests on.
+  useEffect(() => {
+    (globalThis as unknown as Record<string, unknown>).__l2probe = {
+      mode,
+      phase,
+      joinAt,
+      settledAt,
+      joinNote,
+      samples,
+      logs: logStoreRef.current,
+      logGaps: logGapsRef.current,
+    };
+  }, [mode, phase, joinAt, settledAt, joinNote, samples]);
 
   // Split on joinAt rather than on array position: the baseline count is a
   // constant today, but a cancelled baseline would otherwise mislabel rows.
@@ -573,6 +666,12 @@ export function LockProbeScreen({
                     ? 'waiting'
                     : 'not observed'
               }
+            />
+            <SummaryRow
+              label="Daemon log lines"
+              value={`${logStoreRef.current.length}${
+                logGapsRef.current > 0 ? `, ${logGapsRef.current} gaps` : ''
+              }`}
             />
           </View>
 
