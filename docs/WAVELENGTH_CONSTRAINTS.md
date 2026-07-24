@@ -101,9 +101,9 @@ The automatic refresh at the needs_refresh threshold fires on a block epoch near
 
 Design implication. The wallet's own refresh schedule is unobservable and untriggerable from the client. A test that needs a round in flight must use a cooperative exit and accept that it is a different caller into the round machinery. See test L2 in [PAYMENT_TEST_FRAMEWORK.md](PAYMENT_TEST_FRAMEWORK.md).
 
-## Receive dies while a round executes
+## Receive can block for ten minutes, cause unresolved
 
-Observed, 24 July 2026, signet. With a cooperative exit queued into a round, invoice creation on the same wallet hung for 602,812 ms and then failed:
+Observed once in two runs, 24 July 2026, signet. With a cooperative exit queued into a round, invoice creation on the same wallet hung for 602,812 ms and then failed:
 
 ```
 create receive invoice: rpc error: code = Internal desc = start receive:
@@ -113,13 +113,15 @@ unable to create OOR receive script: register receive script:
 response waiter expired
 ```
 
-The block ran from 255 to about 858 seconds after the exit was queued. The round settled at 857 seconds. Before and after that window, invoice creation took 1.2 to 2.4 seconds. See test L2 in [PAYMENT_TEST_FRAMEWORK.md](PAYMENT_TEST_FRAMEWORK.md) for the full timeline.
+The block ran from 255 to about 858 seconds after the exit was queued. The round settled at 857 seconds. Before and after that window, invoice creation took 1.2 to 2.4 seconds.
 
-The failing step is the OOR receive-script registration that the receive path needs. `response waiter expired` is a wait on a response that never arrived, not the local mutex bark held, so the mechanism is not the same even though the symptom is. The wait expired at about ten minutes, which is a bound but not a useful one.
+A second run half an hour later did not reproduce it. Its round settled in 94 seconds rather than 857, and its fourteen in-round invoices took 1,220 to 1,854 ms, the worst of them faster than that run's worst idle call. See test L2 in [PAYMENT_TEST_FRAMEWORK.md](PAYMENT_TEST_FRAMEWORK.md) for both timelines.
 
-Unverified. Which component holds the wait. The error crosses the client, the daemon and the swap server, and the swap server is not in this repository.
+The failing step is the OOR receive-script registration that the receive path needs. `response waiter expired` is a wait on a response that never arrived, not the local mutex bark held. The wait expired at about ten minutes, which is a bound but not a useful one.
 
-Design implication. There is no client-side workaround. Rounds are automatic, driven by the wallet's own expiry schedule, and a user waiting to be paid cannot know one is running. Any product built on this needs the wait bounded and the error made recoverable upstream first.
+Unverified, and this is the open question. Whether the trigger is round execution or an unresponsive operator. The blocked run's round also took nine times longer than the clean run's, so operator degradation would explain both symptoms with one cause. Two runs cannot separate them. The error also crosses the client, the daemon and the swap server, and the swap server is not in this repository, so the component holding the wait is unknown too.
+
+Design implication, whichever way it resolves. A `receive` call can take ten minutes and then fail with `code = Internal`. Bound it client-side, show the user something truthful while it waits, and never leave the receive screen looking live behind a call that may never answer.
 
 ## A cooperative exit costs more than it looks
 

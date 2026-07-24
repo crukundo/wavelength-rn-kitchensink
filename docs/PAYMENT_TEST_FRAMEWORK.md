@@ -35,9 +35,21 @@ What actually happens on-chain at batch expiry — that the operator reclaims th
 
 The other killer: `wallet.maintenance()` waited on server rounds with no timeout, holding the exclusive lock for minutes and blocking invoice creation, so users could not receive at all.
 
-Yes. It reproduces. Alice could not receive for ten minutes while a round executed, and the attempt ended in an error rather than a slow success.
+Sometimes. It happened once in two runs, and the two runs differ in a way that matters more than the failure itself.
 
-The run, on 24 July 2026 on signet. Three idle invoices first, at 1,445, 1,417 and 1,848 ms. Then a 1,000 sat VTXO queued into the next round by cooperative exit, which returned in under 0.1 seconds. Then an invoice every ten seconds.
+Both runs, on 24 July 2026 on signet: three idle invoices, then a 1,000 sat VTXO queued into the next round by cooperative exit, then an invoice every ten seconds until the exit settled and for a minute after.
+
+| | Run 1, 17:00 | Run 2, 17:32 |
+| --- | --- | --- |
+| Idle worst | 1,848 ms | 2,129 ms |
+| Round settled | +857s | +94s |
+| In-round worst | 602,812 ms, failed | 1,854 ms |
+| In-round calls | 28 | 14 |
+| Verdict | blocked | clean |
+
+Run 2 is a clean pass by the test's own criterion, and its round executed fully inside the window. Its worst in-round call was faster than its worst idle call.
+
+Run 1 blocked. Timeline from the moment the exit was queued:
 
 | Window | What happened |
 | --- | --- |
@@ -56,13 +68,19 @@ unable to create OOR receive script: register receive script:
 response waiter expired
 ```
 
-Read the timing against the settlement. The block began at +255s and cleared at about +858s, and the round settled at +857s. The blocked window is the round executing, almost exactly. Nothing was wrong before it and nothing was wrong after it.
+Within run 1 the timing is striking. The block began at +255s and cleared at about +858s; the round settled at +857s. Nothing was wrong before it and nothing was wrong after it.
 
-This is why the first run of L2 read as a pass. That run used a 90 second window and stopped at +90s, deep inside the quiet period before the round ran. Waiting for a round costs nothing. Running one costs ten minutes of receive. A test that stops before the round executes measures the wrong thing, and would have shipped a wrong answer on the question that killed the last attempt.
+But run 2 rules out the simple reading. A round executed there too, start to finish inside the window, and receive never noticed. So "a round executing blocks receive" is not what the evidence says.
 
-One difference from bark worth keeping straight. bark held a local lock. This error says `response waiter expired`, which is a wait on a response that never came, in the OOR receive-script registration the receive path needs from the operator. Whether the wait is in the client, the daemon or the swap server is not established here, and the swap server is not in the public repository. The user-visible failure is the same either way: for ten minutes the wallet cannot receive, and then it errors.
+The variable that actually separates the runs is how long the round took: 857 seconds against 94. That points at a different and more plausible story. The operator was slow or unresponsive for about ten minutes during run 1, which would explain both the fourteen-minute round and a receive-script registration whose response never arrived. One cause, both symptoms. On that reading this is not "rounds block receive" but "the client copes badly with an unresponsive operator", which is a different bug in a different place.
 
-What this means for Kesh. A wallet cannot be told to avoid this. Refreshes are automatic, run against the wallet's own expiry schedule, and a user receiving money has no way to know a round is in progress. Ten minutes of dead receive, ending in an internal error, arriving at an unpredictable time, is not a state a consumer wallet can be shipped in. This is the second of the two failures that shelved Ark, and on this evidence it is not answered.
+We cannot choose between those two readings on two runs. What is established is narrower and still serious: a single `receive` call can block for ten minutes and then fail with `code = Internal`, and it happened while a round was outstanding.
+
+Note what this does to the first, 90 second run of L2. That run stopped at +90s and read as a clean pass. Run 2 also passes cleanly and its round was over by +94s. So the 90 second window was not merely unlucky — against a fast round it would have been a fair test. The reason to distrust it is that it cannot tell a fast round from a slow one, and only the slow one showed the failure.
+
+One difference from bark worth keeping straight. bark held a local lock. This error says `response waiter expired`, a wait on a response that never came, in the OOR receive-script registration the receive path needs. Whether that wait is in the client, the daemon or the swap server is not established, and the swap server is not in the public repository.
+
+What this means for Kesh. Not a verdict yet. One ten-minute failure to receive, ending in an internal error, is disqualifying if it is a recurring property of rounds, and merely a bad day if it is operator degradation the client handles poorly. The next run has to distinguish them, and until it does, L2 is neither passed nor failed.
 
 Two further notes from the earlier short run. The exit produced no activity entry at all, consistent with wavelength#875 and the note under events and polling in the constraints document: the balance moved with nothing in the history to explain it. And the codebase does bound several waits (`replayRoundRegisterTimeout`, the prepared-send TTL, poll caps), which is consistent with what was measured but was not itself the thing tested.
 
@@ -166,8 +184,8 @@ From the Alice and Bob session on 24 July 2026, signet.
 
 | ID | Result | Evidence |
 | --- | --- | --- |
-| L2 | Fail | Alice, 17:00 to 17:16. Quiet for 243s after the exit was queued, then one invoice hung 602,812 ms and failed with `response waiter expired`, then full recovery. The round settled at +857s, so the ten-minute block is the round executing. Idle worst 1,848 ms |
-| L2 (first attempt) | Void | Alice, 16:47 to 16:50, 90 second window. Read as a pass because it stopped at +90s, before the round ran. Recorded to show the trap, not as a result |
+| L2 | Inconclusive, 1 block in 2 runs | Run 1, 17:00: round settled +857s, one invoice hung 602,812 ms and failed with `response waiter expired`. Run 2, 17:32: round settled +94s, 14 in-round calls at 1,220 to 1,854 ms, clean. The runs differ by 9x in round duration, which is the likelier variable |
+| L2 (first attempt) | Void | Alice, 16:47, 90 second window. Cannot distinguish a fast round from a slow one, so it proves nothing either way |
 | R1 | Pass | Repeated 1,000 sat receives on Bob, 15:34 to 15:38 |
 | R2 | Partial | 500 sats arrived as credit at 13:34. The second half of the pass condition, that the credit is then spendable, was never tested |
 | R3 | Pass | 2,000 in, fee 255, 1,745 credited. Later 30,000 boarded |
@@ -216,7 +234,7 @@ Verified in source, safe to build on:
 Observed once on signet, not generalisable:
 
 - every number in the results table. One operator, one afternoon, one build
-- the L2 timings, including the ten-minute block. One round, one operator, one signet afternoon. That it reproduces on every round is the obvious reading but has not been shown; L2 needs running again, and against a second operator
+- the L2 timings. Two runs, one operator, one signet afternoon. The ten-minute block happened once and did not reproduce on the second run, whose round was 9x faster. Whether the cause is round execution or operator degradation is open, and nothing should be reported upstream or internally as settled until a third run separates them
 - the boarding fee of 255 on 2,000 sats
 - `progress.preimage` empty on a completed Lightning send. This may be a path-specific gap rather than a missing feature
 
@@ -235,7 +253,7 @@ Known gaps in the matrix itself: of 22 tests, six have results and one of those 
 What would need to be true for this to carry real user money.
 
 - an answer to L1 that does not depend on the user opening the app. Background refresh, a delegated server-side agent, or an explicit product limit on how long value may sit in Ark
-- L2 fixed. It is not clean: receive dies for ten minutes whenever a round executes, and ends in an internal error. Nothing a client can do works around it, so this needs an upstream fix and a re-test, not a product mitigation
+- L2 resolved one way or the other. Receive blocked for ten minutes and failed on one run of two. If that recurs it is disqualifying and needs an upstream fix, because rounds are automatic and no client can work around them. If it was operator degradation, the ask is smaller but real: bound the wait and return a typed, retryable error instead of `code = Internal`
 - a spendable-amount model enforced at entry, so users never reach a confirmation screen for a payment that cannot succeed
 - a balance presentation that survives fees and refreshes moving the number on its own
 - LNURL confirmed as supported, since it is in the Kesh requirement and is not yet demonstrated here
@@ -244,6 +262,6 @@ The honest summary today. Of the two failures that shelved Ark, Wavelength answe
 
 The phantom balance looks designed out. There is a real per-VTXO expiry state machine, the spendable figure is Live-only end to end, and the code is markedly more careful than bark on exactly that axis.
 
-The maintenance block is not answered. Alice could not receive for ten minutes while a round executed, and the attempt failed with an internal error. It is the same user-visible failure that shelved Ark, arriving at a time no user or client can predict.
+The maintenance block is open, and it is the most urgent thing here. On one run of two, Alice could not receive for ten minutes and the attempt failed with an internal error — the same user-visible failure that shelved Ark. On the other run, with a round that executed nine times faster, receive was untouched. Two runs cannot tell us whether that is a property of rounds or a bad afternoon from one operator.
 
-The lease itself is unchanged, and it still decides whether a consumer wallet can hold value in Ark at all. But L2 now outranks it: a wallet that cannot reliably receive is not shippable regardless of how the expiry question resolves.
+The lease itself is unchanged, and it still decides whether a consumer wallet can hold value in Ark at all. But L2 now outranks it in sequence, not because it is settled but because it is cheap to settle and a wallet that cannot reliably receive is not shippable regardless of how the expiry question resolves.
