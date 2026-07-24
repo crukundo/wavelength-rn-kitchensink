@@ -33,6 +33,8 @@ The wallet UX is derived from Lightning Labs' MIT-licensed v0.1.0 React Native r
 
 See [docs/TEST_MATRIX.md](docs/TEST_MATRIX.md) for the destructive and lifecycle cases that cannot be established by simply tapping through the happy path.
 See [docs/BUILD_VALIDATION.md](docs/BUILD_VALIDATION.md) for the current native build, artifact-size, and simulator smoke-test evidence.
+See [docs/WAVELENGTH_CONSTRAINTS.md](docs/WAVELENGTH_CONSTRAINTS.md) for confirmed protocol and SDK limits, each with provenance, and what they imply for wallet design.
+See [docs/PAYMENT_TEST_FRAMEWORK.md](docs/PAYMENT_TEST_FRAMEWORK.md) for the two-wallet test matrix, the balance model, and what must be true before this carries real money.
 
 ## Install
 
