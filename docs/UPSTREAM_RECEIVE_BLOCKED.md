@@ -1,6 +1,6 @@
 # Upstream issue draft: receive blocked for ten minutes
 
-Not ready to file. It reproduced once in two runs, and the second run points at a different cause. Read [PAYMENT_TEST_FRAMEWORK.md](PAYMENT_TEST_FRAMEWORK.md) before posting this, and get a third run first. Everything below the line is the issue text as it currently stands.
+Reproduced once in three runs. The two candidate causes we could name have both been ruled out, so this now reports a symptom without a theory — which is fine to file, as long as it does not claim one. Read [PAYMENT_TEST_FRAMEWORK.md](PAYMENT_TEST_FRAMEWORK.md) before posting. Everything below the line is the issue text.
 
 ---
 
@@ -10,11 +10,16 @@ Not ready to file. It reproduced once in two runs, and the second run points at 
 
 ## Summary
 
-We saw one `receive` call block for 602,812 ms and then fail with `code = Internal`. It happened while a cooperative exit was outstanding, on a run where the round took 857 seconds to settle. A second run half an hour later, where the round settled in 94 seconds, showed nothing at all: fourteen invoices during the round, all between 1,220 and 1,854 ms.
+We saw one `receive` call block for 602,812 ms — ten minutes — and then fail with `code = Internal`. It reproduced once in three runs of the same procedure on the same wallet against the same operator.
 
-So we cannot tell you this is caused by round execution, and we are not claiming it is. The honest summary is that a single `receive` can hang for ten minutes and then return an internal error, and that on the run where it happened the operator also appeared slow — the round took nine times longer than on the clean run. Operator degradation would explain both symptoms with one cause.
+We are not claiming a cause. We tried two and ruled both out:
 
-We are reporting it because a ten-minute `receive` ending in `code = Internal` looks wrong regardless of which of those it is, and because the failing step is deep enough in the stack that we cannot diagnose it from the public source.
+- **not round execution.** The block happened with a cooperative exit outstanding, but the two clean runs also executed rounds end to end, one of them across 97 invoices
+- **not a slow or degraded operator.** The blocked run's round took 857 seconds, which suggested the operator was struggling. The third run's round took 1,006 seconds — longer — and no call exceeded 2,652 ms
+
+So this is a symptom report. A `receive` can hang for ten minutes and return an untyped internal error, and we cannot predict when.
+
+We are reporting it because that shape is unusable from a client regardless of cause, and because the failing step is deep enough in the stack that we cannot diagnose it from the public source.
 
 ## Environment
 
@@ -40,17 +45,18 @@ Run 1, timeline measured from the moment the exit was queued. Idle baseline 1,41
 | +857s | `pending_out_sat` returns to zero: the exit has settled, so the round executed |
 | +867s to +913s | 5 invoices, 1,233 to 1,722 ms. Fully recovered |
 
-Run 2, same procedure, 32 minutes later. Idle baseline 1,372 to 2,129 ms.
+Runs 2 and 3, same procedure, same wallet, later the same afternoon.
 
-| Offset | Result |
-| --- | --- |
-| +0s to +93s | 9 invoices, 1,232 to 1,854 ms |
-| +94s | The exit settled: the round executed |
-| +104s to +149s | 5 invoices, 1,220 to 1,821 ms |
+| | Run 2 | Run 3 |
+| --- | --- | --- |
+| Round settled | +94s | +1,006s |
+| In-round calls | 14 | 97 |
+| Worst call | 1,854 ms | 2,652 ms |
+| Failures | 0 | 0 |
 
-Nothing anomalous in run 2. Its worst in-round call was faster than its worst idle call.
+Run 3 also ran a control on a second wallet — separate app container, separate daemon, same operator — probing continuously with no round of its own: 99 overlapping calls, worst 1,803 ms, no failures. Since run 3 did not block, that control does not localise anything yet; we mention it so you know the comparison is available on the next reproduction.
 
-The difference we can see between the runs is round duration: 857 seconds against 94.
+One incidental detail that may help you locate the failure. Every successful `receive` writes a `receive_swaps` row in `swaps.db` stamped with `created_at_unix`, and run 1's rows line up with our timings exactly. The blocked call wrote no row at all, so it failed before any swap state was persisted.
 
 ## The error
 
@@ -72,7 +78,7 @@ Whatever the cause, a ten-minute block ending in `code = Internal` is not someth
 
 1. Is a ten-minute `response waiter` expiry intended for the OOR receive-script registration? Is it configurable?
 2. Which component holds that wait — the client, `waved`, or the swap server? We could not tell from the public source, and the swap server is not in this repository.
-3. Is `receive` expected to contend with round execution at all, or does an outstanding round have no bearing on it? If it has none, the slow round on our failing run is a coincidence and we should be looking at operator health instead.
+3. What else can make `register receive script` wait? We have ruled out the two conditions we could control for, so we are asking what a client could be doing — or what operator state could exist — that leaves that registration unanswered.
 4. Is there a way to distinguish an unresponsive operator from a busy one at the client? Right now both surface as an untyped `code = Internal` after ten minutes.
 5. Does the automatic VTXO refresh path share this code path? We could not trigger a refresh on demand to test it, which is the first item below.
 

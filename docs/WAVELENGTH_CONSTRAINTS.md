@@ -103,7 +103,7 @@ Design implication. The wallet's own refresh schedule is unobservable and untrig
 
 ## Receive can block for ten minutes, cause unresolved
 
-Observed once in two runs, 24 July 2026, signet. With a cooperative exit queued into a round, invoice creation on the same wallet hung for 602,812 ms and then failed:
+Observed once in three runs, 24 July 2026, signet. With a cooperative exit queued into a round, invoice creation on the same wallet hung for 602,812 ms and then failed:
 
 ```
 create receive invoice: rpc error: code = Internal desc = start receive:
@@ -115,11 +115,11 @@ response waiter expired
 
 The block ran from 255 to about 858 seconds after the exit was queued. The round settled at 857 seconds. Before and after that window, invoice creation took 1.2 to 2.4 seconds.
 
-A second run half an hour later did not reproduce it. Its round settled in 94 seconds rather than 857, and its fourteen in-round invoices took 1,220 to 1,854 ms, the worst of them faster than that run's worst idle call. See test L2 in [PAYMENT_TEST_FRAMEWORK.md](PAYMENT_TEST_FRAMEWORK.md) for both timelines.
+Two further runs did not reproduce it. One settled its round in 94 seconds, the other in 1,006 — longer than the run that blocked — and neither showed a call over 2.7 seconds across 111 in-round invoices between them. See test L2 in [PAYMENT_TEST_FRAMEWORK.md](PAYMENT_TEST_FRAMEWORK.md) for all three timelines.
 
 The failing step is the OOR receive-script registration that the receive path needs. `response waiter expired` is a wait on a response that never arrived, not the local mutex bark held. The wait expired at about ten minutes, which is a bound but not a useful one.
 
-Unverified, and this is the open question. Whether the trigger is round execution or an unresponsive operator. The blocked run's round also took nine times longer than the clean run's, so operator degradation would explain both symptoms with one cause. Two runs cannot separate them. The error also crosses the client, the daemon and the swap server, and the swap server is not in this repository, so the component holding the wait is unknown too.
+Unverified, and this is the open question. The trigger is unknown. Round execution is ruled out, since two clean runs executed rounds end to end. Round duration is ruled out, since the longest round of the three was clean. The error also crosses the client, the daemon and the swap server, and the swap server is not in this repository, so the component holding the wait is unknown too. A second-wallet control run is now available in the probe and is what will localise it when the block next reproduces.
 
 Design implication, whichever way it resolves. A `receive` call can take ten minutes and then fail with `code = Internal`. Bound it client-side, show the user something truthful while it waits, and never leave the receive screen looking live behind a call that may never answer.
 
