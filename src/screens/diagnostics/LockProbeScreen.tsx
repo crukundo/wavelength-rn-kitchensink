@@ -240,6 +240,13 @@ export function LockProbeScreen({
   const { list, listData, listPending, listError } = useWalletList();
   const balance = useWalletBalance();
   const [mode, setMode] = useState<Mode>('long');
+  // Control mode probes without joining a round: no exit, no VTXO spent. Run
+  // it on a second wallet alongside a real run to tell the two candidate
+  // causes apart. A second wallet is a separate app container, so a separate
+  // daemon and a separate lock, but the same operator and swap server. If the
+  // real run blocks and the control does not, the wait is inside the blocked
+  // wallet's own process. If both block at the same moment, it is the operator.
+  const [control, setControl] = useState(false);
   const [outpoint, setOutpoint] = useState('');
   const [phase, setPhase] = useState<Phase>('idle');
   const [samples, setSamples] = useState<Sample[]>([]);
@@ -391,22 +398,29 @@ export function LockProbeScreen({
     // going away again, so the level before the exit is the reference point.
     const pendingOutBefore = pendingOutSat(balanceRef.current);
 
-    // Start the round join WITHOUT awaiting it. Awaiting would serialise the
-    // probe behind the very call it is meant to run alongside, which would
-    // manufacture the blocking it is trying to detect.
     const startedAt = Date.now();
     setJoinAt(startedAt);
     setPhase('probing');
-    void exitBatch({ mode: 'cooperative', outpoints: [outpoint] })
-      .then((res) => {
-        const started = res.started.length > 0;
-        setJoinNote(
-          `${started ? 'Queued into a round' : 'Not started'} after ${
-            ((Date.now() - startedAt) / 1000).toFixed(1)
-          }s${res.stoppedBy ? ` — stopped: ${res.stoppedBy.reason}` : ''}`,
-        );
-      })
-      .catch((e) => setJoinNote(`Exit call failed: ${errorMessage(e)}`));
+
+    if (control) {
+      // No round, no exit, nothing spent. Everything below still runs, so the
+      // two wallets produce directly comparable timelines.
+      setJoinNote('Control run — no round joined');
+    } else {
+      // Start the round join WITHOUT awaiting it. Awaiting would serialise the
+      // probe behind the very call it is meant to run alongside, which would
+      // manufacture the blocking it is trying to detect.
+      void exitBatch({ mode: 'cooperative', outpoints: [outpoint] })
+        .then((res) => {
+          const started = res.started.length > 0;
+          setJoinNote(
+            `${started ? 'Queued into a round' : 'Not started'} after ${
+              ((Date.now() - startedAt) / 1000).toFixed(1)
+            }s${res.stoppedBy ? ` — stopped: ${res.stoppedBy.reason}` : ''}`,
+          );
+        })
+        .catch((e) => setJoinNote(`Exit call failed: ${errorMessage(e)}`));
+    }
 
     // pending_out has to be seen RISING before a fall can mean anything. The
     // balance lags the exit call by a poll, so without this the first reading
@@ -429,12 +443,14 @@ export function LockProbeScreen({
 
       setSamples((prev) => [...prev, sample]);
 
-      const out = pendingOutSat(balanceRef.current);
-      if (out > pendingOutBefore) {
-        sawRise = true;
-      } else if (sawRise && settled === 0) {
-        settled = Date.now();
-        setSettledAt(settled);
+      if (!control) {
+        const out = pendingOutSat(balanceRef.current);
+        if (out > pendingOutBefore) {
+          sawRise = true;
+        } else if (sawRise && settled === 0) {
+          settled = Date.now();
+          setSettledAt(settled);
+        }
       }
 
       // Refresh without awaiting: the balance must stay current for the check
@@ -454,8 +470,14 @@ export function LockProbeScreen({
   };
 
   const start = () => {
-    if (!outpoint) {
+    if (!control && !outpoint) {
       setError('Select a VTXO to exit. That exit is what joins the round.');
+      return;
+    }
+
+    // A control run spends nothing, so there is nothing to confirm.
+    if (control) {
+      void run();
       return;
     }
 
@@ -513,6 +535,23 @@ export function LockProbeScreen({
           an invoice every {cfg.intervalMs / 1000} seconds. It takes{' '}
           {BASELINE_SAMPLES} idle readings first, because a slow call proves
           nothing without knowing what normal costs.
+        </Text>
+        <View style={styles.modeRow}>
+          <Text style={styles.modeLabel}>Role</Text>
+          <Segmented
+            size="sm"
+            value={control ? 'control' : 'round'}
+            onChange={(v) => setControl(v === 'control')}
+            options={[
+              { value: 'round', label: 'Join round' },
+              { value: 'control', label: 'Control' },
+            ]}
+          />
+        </View>
+        <Text style={styles.intro}>
+          {control
+            ? 'Control joins no round and spends nothing. Run it on the second wallet at the same time as a real run on the first. Both hit the same operator but each has its own daemon and its own lock, so if only the real run blocks, the wait is inside that wallet. If both block together, it is the operator.'
+            : 'This wallet joins the round and pays for it with a VTXO.'}
         </Text>
         <View style={styles.modeRow}>
           <Text style={styles.modeLabel}>Window</Text>
@@ -590,12 +629,13 @@ export function LockProbeScreen({
         </Label>
         <View style={styles.warn}>
           <Text style={styles.warnText}>
-            This spends the selected VTXO and creates up to{' '}
-            {Math.ceil(cfg.capMs / cfg.intervalMs) + BASELINE_SAMPLES} unpaid
-            invoices, each a real activity entry memoed "L2 lock probe". Expect
-            fewer: the interval is measured from the end of each call, and long
-            mode stops as soon as the round settles. The invoices cost nothing.
-            The exit does.
+            {control
+              ? `Control run: no exit, no VTXO spent, nothing to undo. It creates unpaid invoices every ${cfg.intervalMs / 1000} seconds until you stop it or ${cfg.capMs / 60_000} minutes pass.`
+              : null}
+            {control ? null : 'This spends the selected VTXO and creates up to '}
+            {control
+              ? null
+              : `${Math.ceil(cfg.capMs / cfg.intervalMs) + BASELINE_SAMPLES} unpaid invoices, each a real activity entry memoed "L2 lock probe". Expect fewer: the interval is measured from the end of each call, and long mode stops as soon as the round settles. The invoices cost nothing. The exit does.`}
           </Text>
         </View>
         {error ? <InlineError message={error} /> : null}
@@ -605,8 +645,12 @@ export function LockProbeScreen({
               Stop
             </PrimaryButton>
           ) : (
-            <PrimaryButton onPress={start} icon={Play} disabled={!outpoint}>
-              Start probe
+            <PrimaryButton
+              onPress={start}
+              icon={Play}
+              disabled={!control && !outpoint}
+            >
+              {control ? 'Start control' : 'Start probe'}
             </PrimaryButton>
           )}
         </View>
