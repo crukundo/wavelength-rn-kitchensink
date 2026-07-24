@@ -101,6 +101,36 @@ The automatic refresh at the needs_refresh threshold fires on a block epoch near
 
 Design implication. The wallet's own refresh schedule is unobservable and untriggerable from the client. A test that needs a round in flight must use a cooperative exit and accept that it is a different caller into the round machinery. See test L2 in [PAYMENT_TEST_FRAMEWORK.md](PAYMENT_TEST_FRAMEWORK.md).
 
+## Receive dies while a round executes
+
+Observed, 24 July 2026, signet. With a cooperative exit queued into a round, invoice creation on the same wallet hung for 602,812 ms and then failed:
+
+```
+create receive invoice: rpc error: code = Internal desc = start receive:
+rpc error: code = Internal desc = start receive swap: allocate claim
+receive script: create receive script: rpc error: code = Internal desc =
+unable to create OOR receive script: register receive script:
+response waiter expired
+```
+
+The block ran from 255 to about 858 seconds after the exit was queued. The round settled at 857 seconds. Before and after that window, invoice creation took 1.2 to 2.4 seconds. See test L2 in [PAYMENT_TEST_FRAMEWORK.md](PAYMENT_TEST_FRAMEWORK.md) for the full timeline.
+
+The failing step is the OOR receive-script registration that the receive path needs. `response waiter expired` is a wait on a response that never arrived, not the local mutex bark held, so the mechanism is not the same even though the symptom is. The wait expired at about ten minutes, which is a bound but not a useful one.
+
+Unverified. Which component holds the wait. The error crosses the client, the daemon and the swap server, and the swap server is not in this repository.
+
+Design implication. There is no client-side workaround. Rounds are automatic, driven by the wallet's own expiry schedule, and a user waiting to be paid cannot know one is running. Any product built on this needs the wait bounded and the error made recoverable upstream first.
+
+## A cooperative exit costs more than it looks
+
+Observed, 24 July 2026, signet. A 1,000 sat VTXO exited cooperatively arrived in the backing on-chain wallet as 743 sats. The 257 sats went to fees, a quarter of the value.
+
+Timing, same run: queued at 16:48 and settled between 16:51 and 16:59, and on a second run 857 seconds after queueing. Call it about ten to fifteen minutes to leave Ark cooperatively.
+
+One point on an operator fee schedule that varies with amount and remaining blocks, so do not extrapolate the rate. Note only how badly a flat-ish fee scales down: 255 on a 2,000 sat board, 257 on a 1,000 sat exit.
+
+Design implication. Small VTXOs are close to unexitable in economic terms. A wallet holding many small VTXOs cannot leave Ark without losing a large fraction, and the user should be told the cost per VTXO before boarding into that shape.
+
 ## Credit
 
 The credit numbers are server-quoted, not computed locally. The client copies `creditTopupSat`, `creditAppliedSat`, `creditShortfallSat` and `arkFundingSat` straight out of the swap server's `QuotePay` response, and builds the warning string from them. Source, `swapwallet/router.go:777`.
@@ -157,7 +187,9 @@ Note the evaluation point: an expired VTXO only leaves Live once the client proc
 
 `confirmed_sat` rises and `pending_in_sat` clears in the same atomic read. Repo, same comment. Observed: spendable balance and spendability changed together, with no intermediate state.
 
-`pending_in_sat` covers boarding only — confirmed, unconfirmed and adopted totals. An unpaid invoice leaves it at zero. Repo, `balance.ts:47`. `pending_out_sat` covers the pending boarding sweep only. Repo, `balance.ts:57`.
+`pending_in_sat` covers boarding only — confirmed, unconfirmed and adopted totals. An unpaid invoice leaves it at zero. Repo, `balance.ts:47`.
+
+`pending_out_sat` does carry a cooperative exit, contrary to the repo comment at `balance.ts:57` which says only the pending boarding sweep reaches it. Observed, 24 July 2026: with no boarding sweep in flight, a cooperative exit of a 1,000 sat VTXO moved `confirmed_sat` from 8,738 to 7,738 and raised `pending_out_sat` to exactly 1,000, which returned to zero when the exit settled. The comment may still be right about sends, which were not tested. The lock probe relies on this behaviour to detect settlement.
 
 The Balance snapshot excludes the backing on-chain wallet. This repo reads that figure by previewing a wallet sweep with `broadcast: false`. Repo, `src/screens/home/OnChainBalance.tsx`.
 

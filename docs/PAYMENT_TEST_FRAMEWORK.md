@@ -35,17 +35,36 @@ What actually happens on-chain at batch expiry — that the operator reclaims th
 
 The other killer: `wallet.maintenance()` waited on server rounds with no timeout, holding the exclusive lock for minutes and blocking invoice creation, so users could not receive at all.
 
-Run once, on 24 July 2026. The bark failure did not reproduce, but the run did not cover everything the test needs to cover.
+Yes. It reproduces. Alice could not receive for ten minutes while a round executed, and the attempt ended in an error rather than a slow success.
 
-Alice created three invoices while idle, at 1,222 to 1,378 ms. She then queued a 1,000 sat VTXO into the next round with a cooperative exit, and created twenty more invoices over the following 90 seconds. Every one succeeded, at 1,204 to 1,881 ms. The worst call under the round was 1,881 ms against a 30,000 ms failure threshold, and 500 ms slower than the worst idle call.
+The run, on 24 July 2026 on signet. Three idle invoices first, at 1,445, 1,417 and 1,848 ms. Then a 1,000 sat VTXO queued into the next round by cooperative exit, which returned in under 0.1 seconds. Then an invoice every ten seconds.
 
-That is bark's failure mode tested directly and not reproduced. bark blocked while `maintenance()` waited on server rounds, holding the lock for minutes. Alice waited on a round for 90 seconds and served twenty invoices throughout, so the wait holds nothing that receive needs.
+| Window | What happened |
+| --- | --- |
+| +0s to +243s | 22 invoices, 1,222 to 2,421 ms. Indistinguishable from idle |
+| +255s | One invoice hung for 602,812 ms — ten minutes and three seconds — then failed |
+| +857s | The exit settled. The round had executed |
+| +867s to +913s | Five invoices, 1,233 to 1,722 ms. Fully recovered |
 
-The limit, and it is a real one. `exitBatch` returned in 0.1 seconds, having queued the exit rather than performed it. The balance moved from 8,738 to 7,738 immediately with 1,000 showing as outgoing, and it was still outgoing three minutes later, so the operator's round had not executed during the probe window. This run therefore measures the wait for a round, not the execution of one. Those may be the same for locking purposes, but that has not been shown.
+The failure, in full:
 
-Closing that gap needs a longer window, one that runs until the outgoing figure clears, or the daemon logs read through `useWalletLogs` to timestamp the round and place the probe samples against it. Until then L2 is a partial pass and must be quoted as one.
+```
+create receive invoice: rpc error: code = Internal desc = start receive:
+rpc error: code = Internal desc = start receive swap: allocate claim
+receive script: create receive script: rpc error: code = Internal desc =
+unable to create OOR receive script: register receive script:
+response waiter expired
+```
 
-Two further notes from the run. The exit produced no activity entry at all, consistent with wavelength#875 and the note under events and polling in the constraints document: the balance moved with nothing in the history to explain it. And the codebase does bound several waits (`replayRoundRegisterTimeout`, the prepared-send TTL, poll caps), which is consistent with what was measured but was not itself the thing tested.
+Read the timing against the settlement. The block began at +255s and cleared at about +858s, and the round settled at +857s. The blocked window is the round executing, almost exactly. Nothing was wrong before it and nothing was wrong after it.
+
+This is why the first run of L2 read as a pass. That run used a 90 second window and stopped at +90s, deep inside the quiet period before the round ran. Waiting for a round costs nothing. Running one costs ten minutes of receive. A test that stops before the round executes measures the wrong thing, and would have shipped a wrong answer on the question that killed the last attempt.
+
+One difference from bark worth keeping straight. bark held a local lock. This error says `response waiter expired`, which is a wait on a response that never came, in the OOR receive-script registration the receive path needs from the operator. Whether the wait is in the client, the daemon or the swap server is not established here, and the swap server is not in the public repository. The user-visible failure is the same either way: for ten minutes the wallet cannot receive, and then it errors.
+
+What this means for Kesh. A wallet cannot be told to avoid this. Refreshes are automatic, run against the wallet's own expiry schedule, and a user receiving money has no way to know a round is in progress. Ten minutes of dead receive, ending in an internal error, arriving at an unpredictable time, is not a state a consumer wallet can be shipped in. This is the second of the two failures that shelved Ark, and on this evidence it is not answered.
+
+Two further notes from the earlier short run. The exit produced no activity entry at all, consistent with wavelength#875 and the note under events and polling in the constraints document: the balance moved with nothing in the history to explain it. And the codebase does bound several waits (`replayRoundRegisterTimeout`, the prepared-send TTL, poll caps), which is consistent with what was measured but was not itself the thing tested.
 
 The probe lives under Settings, Diagnostics. Three things it settled about how L2 has to be run.
 
@@ -104,7 +123,7 @@ Every test names its pass condition in terms a non-expert can check. Record: dat
 | ID | Test | Pass condition |
 | --- | --- | --- |
 | L1 | Fund Bob, force-quit the app, leave it closed past the batch expiry window, reopen | Balance on reopen matches reality with no phantom spendable value, and the app states plainly what was lost. Measure how long after reopen the balance corrects — it is not necessarily instant. Get the window from a VTXO's `batchExpiry` minus `Info.blockHeight`, not from the operator terms, which do not carry it |
-| L2 | Run the lock probe on Alice (Settings, Diagnostics). It takes 3 idle invoice timings, starts a cooperative exit to queue a VTXO into the next round, then times an invoice every 3 seconds for 90 seconds | Every call during the round completes in about the idle time. Any single call over 30 seconds, or any failure that did not occur idle, reproduces the bark failure |
+| L2 | Run the lock probe on Alice (Settings, Diagnostics) in long mode. It takes 3 idle invoice timings, starts a cooperative exit to queue a VTXO into the next round, then times an invoice every 10 seconds until the exit settles and for a minute after. Long mode is not optional: the round takes about 14 minutes to execute, and a short window ends before it | Every call completes in about the idle time, including across the settlement. Any single call over 30 seconds, or any failure that did not occur idle, reproduces the bark failure |
 | L3 | Take the operator offline during a refresh window, keep the app open | The VTXO escalates to unilateral exit at the critical threshold rather than expiring. This is the behaviour that distinguishes Wavelength from bark |
 | L4 | Kill the app at each of: quote, dispatch, pending, settling | No duplicate payment, no lost entry, state reconciles on restart |
 | L5 | Wipe Bob, restore from mnemonic | Balance and history return. Record what cannot be reconstructed |
@@ -147,7 +166,8 @@ From the Alice and Bob session on 24 July 2026, signet.
 
 | ID | Result | Evidence |
 | --- | --- | --- |
-| L2 | Partial pass | Alice, 16:47 to 16:50. 3 idle invoices at 1,222 to 1,378 ms, then a cooperative exit of a 1,000 sat VTXO, then 20 invoices over 90 seconds at 1,204 to 1,881 ms. Every call succeeded. Worst in-round 1,881 ms against 1,378 ms idle, against a 30,000 ms threshold. See the limit below |
+| L2 | Fail | Alice, 17:00 to 17:16. Quiet for 243s after the exit was queued, then one invoice hung 602,812 ms and failed with `response waiter expired`, then full recovery. The round settled at +857s, so the ten-minute block is the round executing. Idle worst 1,848 ms |
+| L2 (first attempt) | Void | Alice, 16:47 to 16:50, 90 second window. Read as a pass because it stopped at +90s, before the round ran. Recorded to show the trap, not as a result |
 | R1 | Pass | Repeated 1,000 sat receives on Bob, 15:34 to 15:38 |
 | R2 | Partial | 500 sats arrived as credit at 13:34. The second half of the pass condition, that the credit is then spendable, was never tested |
 | R3 | Pass | 2,000 in, fee 255, 1,745 credited. Later 30,000 boarded |
@@ -196,7 +216,7 @@ Verified in source, safe to build on:
 Observed once on signet, not generalisable:
 
 - every number in the results table. One operator, one afternoon, one build
-- the L2 timings. Twenty-three invoice creations against one operator on one signet afternoon, with the round not yet executed
+- the L2 timings, including the ten-minute block. One round, one operator, one signet afternoon. That it reproduces on every round is the obvious reading but has not been shown; L2 needs running again, and against a second operator
 - the boarding fee of 255 on 2,000 sats
 - `progress.preimage` empty on a completed Lightning send. This may be a path-specific gap rather than a missing feature
 
@@ -206,7 +226,7 @@ Inference or inherited, must not be quoted as fact:
 - that the operator reclaims the on-chain backing at batch expiry. Inherited from Kesh's bark findings and general Ark semantics. The Wavelength source shows the client marking the VTXO failed, not what the operator does
 - that change re-minting moves the balance. Consistent with the coin-selection model and with the failure we saw, not separately traced
 - the reading that a failed send burns the payee's receive intent. The error comes from the swap server, which is not in the public repository
-- that Wavelength answers Kesh's second killer. L2 has run once and the bark failure did not reproduce, but the round had not executed by the end of the window, so waiting for a round is what was tested, not running one. Do not report the maintenance lock as cleared on this evidence
+- where the ten-minute receive block in L2 actually lives. The error is `response waiter expired` on an OOR receive-script registration, which is a wait on a response rather than the local mutex bark held. The client, the daemon and the swap server are all candidates, and the swap server is not in the public repository. What is observed is the block and its coincidence with the round; the mechanism is not
 
 Known gaps in the matrix itself: of 22 tests, six have results and one of those is partial. The other 16 have never been run, and every lifecycle test is among them.
 
@@ -215,9 +235,15 @@ Known gaps in the matrix itself: of 22 tests, six have results and one of those 
 What would need to be true for this to carry real user money.
 
 - an answer to L1 that does not depend on the user opening the app. Background refresh, a delegated server-side agent, or an explicit product limit on how long value may sit in Ark
-- L2 clean, or receive is unreliable under load
+- L2 fixed. It is not clean: receive dies for ten minutes whenever a round executes, and ends in an internal error. Nothing a client can do works around it, so this needs an upstream fix and a re-test, not a product mitigation
 - a spendable-amount model enforced at entry, so users never reach a confirmation screen for a payment that cannot succeed
 - a balance presentation that survives fees and refreshes moving the number on its own
 - LNURL confirmed as supported, since it is in the Kesh requirement and is not yet demonstrated here
 
-The honest summary today: Wavelength is a substantially more careful implementation than bark on exactly the axis that killed the last attempt, and the phantom-balance failure looks designed out. The lease itself is unchanged, and it is the thing that decides whether a consumer wallet can hold value in Ark at all.
+The honest summary today. Of the two failures that shelved Ark, Wavelength answers one and reproduces the other.
+
+The phantom balance looks designed out. There is a real per-VTXO expiry state machine, the spendable figure is Live-only end to end, and the code is markedly more careful than bark on exactly that axis.
+
+The maintenance block is not answered. Alice could not receive for ten minutes while a round executed, and the attempt failed with an internal error. It is the same user-visible failure that shelved Ark, arriving at a time no user or client can predict.
+
+The lease itself is unchanged, and it still decides whether a consumer wallet can hold value in Ark at all. But L2 now outranks it: a wallet that cannot reliably receive is not shippable regardless of how the expiry question resolves.
