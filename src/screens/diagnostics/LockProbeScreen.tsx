@@ -400,10 +400,12 @@ export function LockProbeScreen({
         </Label>
         <View style={styles.warn}>
           <Text style={styles.warnText}>
-            This spends the selected VTXO and creates roughly{' '}
+            This spends the selected VTXO and creates up to{' '}
             {Math.ceil(PROBE_WINDOW_MS / PROBE_INTERVAL_MS) + BASELINE_SAMPLES}{' '}
             unpaid invoices, each a real activity entry memoed "L2 lock probe".
-            The invoices cost nothing. The exit does.
+            Expect fewer: the interval is measured from the end of each call, so
+            the slower receive is, the fewer fit. The invoices cost nothing. The
+            exit does.
           </Text>
         </View>
         {error ? <InlineError message={error} /> : null}

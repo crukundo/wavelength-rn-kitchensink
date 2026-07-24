@@ -35,9 +35,19 @@ What actually happens on-chain at batch expiry — that the operator reclaims th
 
 The other killer: `wallet.maintenance()` waited on server rounds with no timeout, holding the exclusive lock for minutes and blocking invoice creation, so users could not receive at all.
 
-Not yet verified for Wavelength. The codebase does bound several waits (`replayRoundRegisterTimeout`, the prepared-send TTL, poll caps), but I have not traced whether a round join can block receive. Test L2 below is the probe, and it is the highest-value test after L1.
+Run once, on 24 July 2026. The bark failure did not reproduce, but the run did not cover everything the test needs to cover.
 
-The harness now carries that probe, under Settings, Diagnostics. Three things it settled about how L2 has to be run.
+Alice created three invoices while idle, at 1,222 to 1,378 ms. She then queued a 1,000 sat VTXO into the next round with a cooperative exit, and created twenty more invoices over the following 90 seconds. Every one succeeded, at 1,204 to 1,881 ms. The worst call under the round was 1,881 ms against a 30,000 ms failure threshold, and 500 ms slower than the worst idle call.
+
+That is bark's failure mode tested directly and not reproduced. bark blocked while `maintenance()` waited on server rounds, holding the lock for minutes. Alice waited on a round for 90 seconds and served twenty invoices throughout, so the wait holds nothing that receive needs.
+
+The limit, and it is a real one. `exitBatch` returned in 0.1 seconds, having queued the exit rather than performed it. The balance moved from 8,738 to 7,738 immediately with 1,000 showing as outgoing, and it was still outgoing three minutes later, so the operator's round had not executed during the probe window. This run therefore measures the wait for a round, not the execution of one. Those may be the same for locking purposes, but that has not been shown.
+
+Closing that gap needs a longer window, one that runs until the outgoing figure clears, or the daemon logs read through `useWalletLogs` to timestamp the round and place the probe samples against it. Until then L2 is a partial pass and must be quoted as one.
+
+Two further notes from the run. The exit produced no activity entry at all, consistent with wavelength#875 and the note under events and polling in the constraints document: the balance moved with nothing in the history to explain it. And the codebase does bound several waits (`replayRoundRegisterTimeout`, the prepared-send TTL, poll caps), which is consistent with what was measured but was not itself the thing tested.
+
+The probe lives under Settings, Diagnostics. Three things it settled about how L2 has to be run.
 
 The SDK has no refresh RPC, so a round join cannot be requested. The only operation a client can start on demand that does round work is a cooperative exit, which "queues each outpoint into the next round" (`exit.d.ts:5`). That is the trigger, and it costs a VTXO per run: its value leaves Ark for the on-chain backing wallet.
 
@@ -137,13 +147,14 @@ From the Alice and Bob session on 24 July 2026, signet.
 
 | ID | Result | Evidence |
 | --- | --- | --- |
+| L2 | Partial pass | Alice, 16:47 to 16:50. 3 idle invoices at 1,222 to 1,378 ms, then a cooperative exit of a 1,000 sat VTXO, then 20 invoices over 90 seconds at 1,204 to 1,881 ms. Every call succeeded. Worst in-round 1,881 ms against 1,378 ms idle, against a 30,000 ms threshold. See the limit below |
 | R1 | Pass | Repeated 1,000 sat receives on Bob, 15:34 to 15:38 |
 | R2 | Partial | 500 sats arrived as credit at 13:34. The second half of the pass condition, that the credit is then spendable, was never tested |
 | R3 | Pass | 2,000 in, fee 255, 1,745 credited. Later 30,000 boarded |
 | S1 | Fails late | `change 745 is below minimum change amount 1000`, surfaced at send, not at entry |
 | S3 | Fails late | `credit shortfall requires 1000 sat top-up`, surfaced at confirmation with Confirm and pay still enabled |
 | S4 | Fails permanently | `AlreadyExists: receive intent already used`. The invoice is dead, and the error names the wrong cause |
-| L1 to L5, R4 to R7, S2, S5 to S7, B1 to B3 | Not run | 16 tests, including every lifecycle test |
+| L1, L3 to L5, R4 to R7, S2, S5 to S7, B1 to B3 | Not run | 15 tests, including every remaining lifecycle test |
 
 Round trips between Alice and Bob work once both wallets hold VTXOs of a workable shape. Every failure we hit traced back to VTXO shape or to intent reuse, not to the amount the user asked for.
 
@@ -185,6 +196,7 @@ Verified in source, safe to build on:
 Observed once on signet, not generalisable:
 
 - every number in the results table. One operator, one afternoon, one build
+- the L2 timings. Twenty-three invoice creations against one operator on one signet afternoon, with the round not yet executed
 - the boarding fee of 255 on 2,000 sats
 - `progress.preimage` empty on a completed Lightning send. This may be a path-specific gap rather than a missing feature
 
@@ -194,7 +206,7 @@ Inference or inherited, must not be quoted as fact:
 - that the operator reclaims the on-chain backing at batch expiry. Inherited from Kesh's bark findings and general Ark semantics. The Wavelength source shows the client marking the VTXO failed, not what the operator does
 - that change re-minting moves the balance. Consistent with the coin-selection model and with the failure we saw, not separately traced
 - the reading that a failed send burns the payee's receive intent. The error comes from the swap server, which is not in the public repository
-- that Wavelength answers Kesh's second killer. Test L2 is unrun. Nothing in this document should be read as evidence either way on the maintenance lock
+- that Wavelength answers Kesh's second killer. L2 has run once and the bark failure did not reproduce, but the round had not executed by the end of the window, so waiting for a round is what was tested, not running one. Do not report the maintenance lock as cleared on this evidence
 
 Known gaps in the matrix itself: of 22 tests, six have results and one of those is partial. The other 16 have never been run, and every lifecycle test is among them.
 
