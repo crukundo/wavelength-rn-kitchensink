@@ -16,7 +16,7 @@ Where Wavelength stands, verified in source:
 
 - there is a real per-VTXO expiry state machine with four states: safe, needs_refresh, critical, expired (`vtxo/expiry.go:6`)
 - thresholds are dynamic, not fixed. The critical threshold is `max(36 blocks, tree depth × 6 + CSV delay)`, so it always leaves enough time to exit unilaterally (`vtxo/expiry.go:164`)
-- at needs_refresh the wallet requests a cooperative forfeit into a fresh round. At critical it escalates to the chain resolver for unilateral exit rather than waiting (`vtxo/transitions.go:197`)
+- at needs_refresh the wallet requests a cooperative forfeit into a fresh round. At critical it escalates to the chain resolver for unilateral exit rather than waiting (`vtxo/transitions.go:198`)
 - the operator's free-refresh window is used to avoid fees, but never at the cost of safety: "Never trade away the configured retry buffer merely to chase a fee waiver" (`vtxo/expiry.go:189`)
 - if a batch does expire, the VTXO moves to `FailedState` with `Recoverable: false` (`vtxo/transitions.go:228`)
 - the balance the app reads is Live-only, traced end to end. `ConfirmedSat` is set from `GetVtxoBalanceSat()` (`swapwallet/service.go:595`), which is `SumSpendableBalance(ListLiveVTXOs)` (`waved/rpc_server.go:750`). The source comments say it outright: "confirmed_sat is VTXO-live only" and "Only the Live subset is spendable; the other non-terminal states would overstate vtxo_balance_sat"
@@ -25,7 +25,7 @@ So while the wallet is running, the phantom-balance half of the bark failure is 
 
 Two important limits on that claim.
 
-It holds only once the client has processed a block epoch. Expiry is evaluated in `handleBlockEpoch`, driven by a chainsource subscription (`vtxo/actor.go:711`). On reopen after a long closure the local database still records the VTXO as Live, so until the first epoch is processed the balance can include value that no longer exists. That is bark's exact symptom, transient rather than permanent. Whether the first epoch arrives immediately on subscribe, or only at the next block, is not established. Test L1 must measure that window, not assume it is zero.
+It holds only once the client has processed a block epoch. Each VTXO actor subscribes to chainsource block notifications (`vtxo/actor.go:711`), which arrive as a `BlockEpochEvent` and drive `ExpiryConfig.CheckExpiry(vtxo, height)` (`vtxo/actor.go:233`). On reopen after a long closure the local database still records the VTXO as Live, so until the first epoch is processed the balance can include value that no longer exists. That is bark's exact symptom, transient rather than permanent. Whether the first epoch arrives immediately on subscribe, or only at the next block, is not established. Test L1 must measure that window, not assume it is zero.
 
 The lease itself is unchanged, on the reasonable inference that a closed app processes no block epochs. The daemon runs in the app process, so when the app is killed nothing refreshes or escalates. I have not verified whether iOS background execution could keep any of it alive, and no background capability was found in the harness. Treat "a closed wallet eventually loses its funds" as near-certain but not source-proven, and let L1 settle it.
 
@@ -54,7 +54,7 @@ Run 4 puts that beyond argument. Its round took 1,655 seconds, at least twice an
 
 Run 5 came back the other way, settling in 476 seconds, so the four measured rounds now run 94, 476, 1,006 and 1,655 seconds with no pattern to them and every one of them clean.
 
-Runs 3, 4 and 5 all carried a control, and the two wallets come out near indistinguishable each time. Run 4: median 1,661 ms in the round against 1,635 ms on the control. Run 5: 1,630 ms against 1,654 ms, with the round wallet the faster of the two. Across those two pairings that is roughly 500 calls and a difference of about 25 ms either way. Joining a round does not make receive measurably slower. The control remains what localises the fault when a block next reproduces, and on a clean run it settles nothing.
+Runs 3, 4 and 5 all carried a control, and the two wallets come out near indistinguishable each time. Run 4: median 1,661 ms in the round against 1,635 ms on the control's 180 in-round calls. Run 5: 1,630 ms against 1,654 ms across 79, with the round wallet the faster of the two. Across those two pairings that is 485 in-round calls and a difference of about 25 ms either way. Run 4's control median was taken over its whole run of 183 including 3 idle calls, so it is not strictly like for like; the gap is far inside the noise either way. Joining a round does not make receive measurably slower. The control remains what localises the fault when a block next reproduces, and on a clean run it settles nothing.
 
 Run 1 blocked. Timeline from the moment the exit was queued:
 
@@ -123,7 +123,7 @@ Balance is one atomic snapshot with five independent fields, not a running total
 
 - `confirmed_sat` — spendable value, the sum of Live VTXOs only
 - `pending_in_sat` — boarding only, blending confirmed, unconfirmed and adopted deposits
-- `pending_out_sat` — the pending boarding sweep only
+- `pending_out_sat` — the pending boarding sweep, and a queued cooperative exit. Observed across five probe runs, which detect settlement by watching this figure rise when the exit is queued and fall when the round settles. Whether an in-flight send appears here has not been tested
 - `credit_available_sat` and `credit_reserved_sat` — the server-side credit ledger
 
 An in-flight Lightning receive appears in none of them. An unpaid invoice leaves `pending_in_sat` at zero.
@@ -240,7 +240,11 @@ What we learned the hard way about capturing evidence.
 
 ## Confidence register
 
-Audited on 24 July 2026 against the v0.1.0 source. Everything in this document falls into one of these three buckets. Do not let anything move up a bucket without a citation.
+Audited on 24 July 2026 against the v0.1.0 source, and re-audited on 28 July against a fresh clone. Everything in this document falls into one of these three buckets. Do not let anything move up a bucket without a citation.
+
+What the 28 July re-audit checked and found. Every file-and-line citation in these documents was opened: 27 into the Go source, 8 into the SDK type definitions, 9 into this repo. The substance behind the numeric claims was re-read rather than assumed — the four expiry states, `CriticalThresholdBlocks: 36` and `TreeDepthMultiplier: 6`, `OperatorTerms` carrying 13 fields of which 11 are policy, `ServerInfo` carrying exactly one, `minChangeFloor` at 330, `maxBoardOutputs` at 1000, `sendIntentTTL` at 5 minutes, and the balance chain from `ConfirmedSat` through `GetVtxoBalanceSat()` to `SumSpendableBalance(ListLiveVTXOs)`. All of it held.
+
+Four things did not, and are fixed. The tag hash recorded here was the annotated tag object rather than the commit. `handleBlockEpoch` does not exist — the real path is a chainsource subscription delivering `BlockEpochEvent` into `CheckExpiry`. One transition citation was a line early. And `pending_out_sat` was described as boarding-only in both this document and `src/lib/balance.ts`, which five probe runs contradict.
 
 Verified in source, safe to build on:
 
@@ -270,7 +274,7 @@ Inference or inherited, must not be quoted as fact:
 - where the ten-minute receive block in L2 actually lives. The error is `response waiter expired` on an OOR receive-script registration, which is a wait on a response rather than the local mutex bark held. The client, the daemon and the swap server are all candidates, and the swap server is not in the public repository. What is observed is one call blocking while a round was outstanding; the mechanism is not
 - that the block has anything to do with the round beyond happening during one. The apparent coincidence of the block clearing as the round settled was the serial sampler, not the system. Two of three runs executed rounds with receive untouched
 
-Known gaps in the matrix itself: of 22 tests, six have results and one of those is partial. The other 16 have never been run, and every lifecycle test is among them.
+Known gaps in the matrix itself: of 22 tests, seven have results and one of those is partial. The other 15 have never been run, and every lifecycle test bar L2 is among them.
 
 ## Before the next attempt
 

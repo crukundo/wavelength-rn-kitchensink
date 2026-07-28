@@ -25,7 +25,7 @@ We are reporting it because that shape is unusable from a client regardless of c
 
 ## Environment
 
-- `wavelength` v0.1.0, tag commit `6ff371852ff93044ffeab201fbb61a87520ef67e`
+- `wavelength` v0.1.0, tag commit `ff510b1130640bc43746259d6a742cd4bad6abf3`
 - `@lightninglabs/wavelength-react` 0.1.0, `@lightninglabs/wavelength-react-native` 0.1.0
 - React Native 0.81.5, React 19.1.0, Expo 54.0.25, New Architecture
 - iOS 18.6 simulator (iPhone 11), macOS 26.5.2
@@ -58,7 +58,7 @@ Runs 2 to 5, same procedure, same wallet. Runs 2 and 3 followed later the same a
 | Worst call | 1,854 ms | 2,652 ms | 3,341 ms | 3,225 ms |
 | Failures | 0 | 0 | 0 | 0 |
 
-Runs 3, 4 and 5 also ran a control on a second wallet — separate app container, separate daemon, same operator — probing continuously with no round of its own. Those pairings are the tightest data we have: run 4 gave a median of 1,661 ms on the wallet in the round against 1,635 ms on the control, and run 5 gave 1,630 ms against 1,654 ms. Across roughly 500 calls the difference is about 25 ms, in both directions. Being in a round does not measurably slow `receive`. Since none of those runs blocked, the control does not localise anything yet; we mention it so you know the comparison is available on the next reproduction.
+Runs 3, 4 and 5 also ran a control on a second wallet — separate app container, separate daemon, same operator — probing continuously with no round of its own. Those pairings are the tightest data we have: run 4 gave a median of 1,661 ms on the wallet in the round against 1,635 ms on the control, and run 5 gave 1,630 ms against 1,654 ms. Across 485 in-round calls the difference is about 25 ms, in both directions. Being in a round does not measurably slow `receive`. Since none of those runs blocked, the control does not localise anything yet; we mention it so you know the comparison is available on the next reproduction.
 
 One incidental detail that may help you locate the failure. Every successful `receive` writes a `receive_swaps` row in `swaps.db` stamped with `created_at_unix`, and run 1's rows line up with our timings exactly. The blocked call wrote no row at all, so it failed before any swap state was persisted.
 

@@ -14,13 +14,13 @@ This repo is the harness for deciding whether Lightning Labs' Wavelength answers
 ## Headline: where the two questions stand
 
 - L1, the phantom balance, is answered by design while the wallet runs. A per-VTXO expiry state machine, spendable traced as Live-only. Not yet tested through a real closure. See the confidence register.
-- L2, the maintenance block, is the live thread and is not settled. On one run of three, receive blocked for ten minutes and failed with an internal error — the same user-visible failure that shelved Ark. The other two runs were clean. We have ruled out two candidate causes and do not yet know the trigger.
+- L2, the maintenance block, is the live thread and is not settled. On one run of five, receive blocked for ten minutes and failed with an internal error — the same user-visible failure that shelved Ark. The other four were clean. Round execution and round duration are both ruled out, and no replacement hypothesis has been tested, so the trigger is unknown.
 
 If you read nothing else, read the L2 section of [PAYMENT_TEST_FRAMEWORK.md](PAYMENT_TEST_FRAMEWORK.md) and the "next step" at the end of this handoff.
 
 ## Read these first
 
-- [PAYMENT_TEST_FRAMEWORK.md](PAYMENT_TEST_FRAMEWORK.md) — the two decisive questions, the balance model, the 22-test matrix, and all three L2 runs
+- [PAYMENT_TEST_FRAMEWORK.md](PAYMENT_TEST_FRAMEWORK.md) — the two decisive questions, the balance model, the 22-test matrix, and all five L2 runs
 - [WAVELENGTH_CONSTRAINTS.md](WAVELENGTH_CONSTRAINTS.md) — every limit verified against source, with provenance markers
 - [UPSTREAM_RECEIVE_BLOCKED.md](UPSTREAM_RECEIVE_BLOCKED.md) — the draft GitHub issue for the L2 block, ready to file
 
@@ -28,7 +28,7 @@ Do not trust any constraint not marked Source. The confidence register in the te
 
 ## The L2 lock probe
 
-Built this session. It lives in the app at Settings, Diagnostics, Lock probe (`src/screens/diagnostics/LockProbeScreen.tsx`).
+Built on 24 July 2026 and rebuilt on 28 July around concurrent sampling. It lives in the app at Settings, Diagnostics, Lock probe (`src/screens/diagnostics/LockProbeScreen.tsx`).
 
 Why it exists: the SDK has no refresh RPC, so a round cannot be requested. The only round work a client can start on demand is a cooperative exit, which "queues each outpoint into the next round" (`wavelength-core exit.d.ts:5`). The probe uses that as its trigger.
 
@@ -40,15 +40,15 @@ That change landed on 28 July 2026 and is verified on both wallets, without spen
 
 Three modes:
 
-- Fast: 3s interval, 90s window. Do not trust it alone — with a 1-in-3 failure rate no single short run proves anything.
-- Long: 10s interval, runs until the exit settles plus a minute. This is the real test. A round takes 2 to 17 minutes to execute, so budget 15 to 20 minutes per run.
+- Fast: 3s interval, 90s window. Do not trust it alone — at one block in five runs, no single short run proves anything.
+- Long: 10s interval, runs until the exit settles plus a minute, giving up at 45. This is the real test. Measured rounds have taken 1.6, 7.9, 16.8 and 27.6 minutes, so budget half an hour and do not be surprised by either end.
 - Control: joins no round, spends no VTXO. Run it on the second wallet at the same time as a real run on the first. Both hit the same operator, but each has its own daemon and lock. If only the round wallet blocks, the wait is inside that wallet. If both block together, it is the operator.
 
 Each exit costs one whole VTXO, which leaves Ark for the on-chain backing wallet. The unpaid probe invoices cost nothing and expire on their own.
 
 ### Reading a run out cleanly
 
-A 15-minute run produces far more data than is readable by scrolling the phone. The probe publishes the whole run on `globalThis.__l2probe`, so pull it over the Metro debugger instead of transcribing screenshots.
+A long run produces far more data than is readable by scrolling the phone. The probe publishes the whole run on `globalThis.__l2probe`, so pull it over the Metro debugger instead of transcribing screenshots.
 
 ```
 debugger-connect  (see logicalDeviceIds below)
@@ -77,7 +77,7 @@ Ruled out as the trigger:
 - round execution — runs 2 to 5 all executed rounds with receive untouched
 - round duration — runs 3 and 4 both ran longer rounds than run 1 could have had, and both stayed clean. Run 4's was 1,655 seconds. Measured rounds now span 94 to 1,655 seconds with no pattern
 
-Runs 3, 4 and 5 carried a control on Bob. Run 3: 99 overlapping calls, worst 1,803 ms. Run 4: 183 calls, median 1,635 ms against Alice's 1,661 ms. Run 5: 79 calls, median 1,654 ms against Alice's 1,630 ms. None localised anything, because none of those runs blocked. The control stays in place.
+Runs 3, 4 and 5 carried a control on Bob. Run 3: 99 overlapping calls, worst 1,803 ms. Run 4: 180 in-round calls, median 1,635 ms against Alice's 1,661 ms. Run 5: 79 in-round calls, median 1,654 ms against Alice's 1,630 ms. None localised anything, because none of those runs blocked. The control stays in place.
 
 Runs 4 and 5 are the first of the concurrent sampler, and nothing stalled in either, so the overlap discrimination has still never fired. Peak in flight was 1 on both wallets, since calls take about 1.6 seconds against a 10-second interval. The instrument works; it has yet to meet a block.
 
@@ -110,7 +110,7 @@ The Metro logicalDeviceId is what `debugger-connect` needs — the UDID is rejec
 
 Balances after run 5 on 28 July 2026, signet. They move on their own from refresh fees, so read them from the app, do not trust these:
 
-- Alice: 2,238 spendable in a single live VTXO, 500 credit. The 744 left in run 4 and the 1,500 in run 5, so she has one probe run left. After that, reboard from the on-chain backing or swap roles and probe from Bob.
+- Alice: 2,238 spendable in a single live VTXO, 500 credit, 4,704 on-chain backing. The 744 left in run 4 and the 1,500 in run 5, so she has one probe run left. After that, reboard from the on-chain backing or swap roles and probe from Bob.
 - Bob: 26,990 spendable, 500 credit. Unspent — he has only ever run controls.
 
 Both wallets are password wallets. Separate simulators give separate app containers, so each wallet has its own dataDir, seed and node identity.
@@ -131,6 +131,11 @@ Everything is committed. Branch `main`, nothing pushed. Remote is `crukundo/wave
 Commits this session, newest first:
 
 ```
+685b572 Run 5 is clean; measured rounds now span 94 to 1,655 seconds
+d827fac Read the give-up time from the config, not the copy
+760a6fd Give long runs 45 minutes, not 30
+1672cc2 Run 4 is clean across the longest round yet
+29fee03 Correct run 1's round timing: it was never measured
 36b52ba Probe through a stall instead of stopping at it
 6b836f1 Update session handoff for the L2 investigation
 9cdcff6 Run 3 rules out slow rounds; trigger unknown
@@ -154,11 +159,13 @@ Most findings came from reading the Wavelength Go source. It was cloned to a scr
 git clone --depth 1 --branch v0.1.0 https://github.com/lightninglabs/wavelength.git
 ```
 
-Tag `v0.1.0` is commit `6ff371852ff93044ffeab201fbb61a87520ef67e`. Every file and line reference in the docs points at that commit.
+Tag `v0.1.0` resolves to commit `ff510b1130640bc43746259d6a742cd4bad6abf3`. The hash `6ff3718...` recorded here until 28 July 2026 is the annotated tag object, not the commit — `git ls-remote --tags` shows both. Every file and line reference in the docs points at `ff510b11`.
 
 ## The next step
 
-Run the long probe on Alice with the control running on Bob, repeatedly, until the block reproduces. Then read both `__l2probe` objects immediately.
+File the upstream issue, then keep probing. Those are not alternatives, and the order matters: [UPSTREAM_RECEIVE_BLOCKED.md](UPSTREAM_RECEIVE_BLOCKED.md) is ready to post, and its second question — which component holds the wait — is one only Lightning Labs can answer. Five runs have produced one block and four nulls, so another run is more likely to produce a fifth null than a reproduction. A reply takes days; probing costs nothing while you wait.
+
+Then run the long probe on Alice with the control running on Bob, repeatedly, until the block reproduces. Read both `__l2probe` objects immediately.
 
 Two questions get answered, in this order. First, from Alice alone: did the calls that started during the stall still get served? If they did, one response was lost. If they all stalled, receive was held wallet-wide, which is the bark failure. Second, from Bob: if Alice stalled wallet-wide, did Bob stall at the same moment? Alice alone means the wait is inside that wallet — Lightning Labs' bug. Both together means it is the operator — a different report to a different place.
 

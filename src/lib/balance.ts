@@ -52,8 +52,12 @@ export function pendingInSat(balance: Balance | null): number {
 }
 
 // pendingOutSat returns the in-flight outbound amount (wavewalletrpc
-// pending_out_sat). Again despite the proto comment, the daemon reports only the
-// pending boarding sweep here: an in-flight send or exit is not counted.
+// pending_out_sat). Again despite the proto comment, the daemon reports the
+// pending boarding sweep here — and, contrary to what this comment said until
+// 28 July 2026, a queued cooperative exit as well. The exit's value appears
+// while the round is outstanding and clears when it settles, which is how the
+// L2 lock probe detects settlement; four runs have relied on it. Whether an
+// in-flight send is counted has not been tested.
 export function pendingOutSat(balance: Balance | null): number {
   return sat(balance?.pendingOutSat);
 }

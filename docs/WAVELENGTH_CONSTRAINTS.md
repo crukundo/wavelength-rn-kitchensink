@@ -2,7 +2,7 @@
 
 Constraints confirmed against the Wavelength source, and what each one means for wallet design. The goal is to stop rediscovering the same limits through failed payments.
 
-Verified against `github.com/lightninglabs/wavelength` at tag `v0.1.0`, commit `6ff371852ff93044ffeab201fbb61a87520ef67e`. File and line references point at that tag. The repository is public and MIT licensed.
+Verified against `github.com/lightninglabs/wavelength` at tag `v0.1.0`, commit `ff510b1130640bc43746259d6a742cd4bad6abf3`. File and line references point at that tag. The repository is public and MIT licensed.
 
 ## Provenance
 
