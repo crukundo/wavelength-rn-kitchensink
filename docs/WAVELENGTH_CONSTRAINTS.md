@@ -115,7 +115,7 @@ response waiter expired
 
 The block ran from 255 to about 858 seconds after the exit was queued. The round settled somewhere inside that window; the probe recorded 857 seconds but could not have seen it any earlier, because it only checked the balance after an invoice call returned and none returned during the block. Before and after the window, invoice creation took 1.2 to 2.4 seconds.
 
-Three further runs did not reproduce it. Their rounds settled in 94, 1,006 and 1,655 seconds — the last two both longer than the blocked run's round could have been — and none showed a call over 3.4 seconds across 283 in-round invoices between them. See test L2 in [PAYMENT_TEST_FRAMEWORK.md](PAYMENT_TEST_FRAMEWORK.md) for all four timelines.
+Four further runs did not reproduce it. Their rounds settled in 94, 476, 1,006 and 1,655 seconds — the two longest both beyond anything the blocked run's round could have been — and none showed a call over 3.4 seconds across 337 in-round invoices between them. See test L2 in [PAYMENT_TEST_FRAMEWORK.md](PAYMENT_TEST_FRAMEWORK.md) for all five timelines.
 
 The failing step is the OOR receive-script registration that the receive path needs. `response waiter expired` is a wait on a response that never arrived, not the local mutex bark held. The wait expired at about ten minutes, which is a bound but not a useful one.
 
@@ -127,7 +127,7 @@ Design implication, whichever way it resolves. A `receive` call can take ten min
 
 Observed, 24 July 2026, signet. A 1,000 sat VTXO exited cooperatively arrived in the backing on-chain wallet as 743 sats. The 257 sats went to fees, a quarter of the value.
 
-Timing varies enormously. Measured settlements are 94, 1,006 and 1,655 seconds, so the observed spread is about two to twenty-eight minutes. Do not quote a typical figure. Two other runs settled inside windows we could not measure: one between 16:51 and 16:59 on the clock, and one between 255 and 858 seconds after queueing.
+Timing varies enormously. Measured settlements are 94, 476, 1,006 and 1,655 seconds, so the observed spread is about two to twenty-eight minutes. Do not quote a typical figure. Two other runs settled inside windows we could not measure: one between 16:51 and 16:59 on the clock, and one between 255 and 858 seconds after queueing.
 
 One point on an operator fee schedule that varies with amount and remaining blocks, so do not extrapolate the rate. Note only how badly a flat-ish fee scales down: 255 on a 2,000 sat board, 257 on a 1,000 sat exit.
 

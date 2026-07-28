@@ -35,24 +35,26 @@ What actually happens on-chain at batch expiry — that the operator reclaims th
 
 The other killer: `wallet.maintenance()` waited on server rounds with no timeout, holding the exclusive lock for minutes and blocking invoice creation, so users could not receive at all.
 
-Once in four runs. The failure is real and severe, and nothing we have measured predicts when it happens.
+Once in five runs. The failure is real and severe, and nothing we have measured predicts when it happens.
 
-Runs 1 to 3 on 24 July 2026, run 4 on 28 July, all on signet: three idle invoices, then a VTXO queued into the next round by cooperative exit, then an invoice every ten seconds until the exit settled and for a minute after.
+Runs 1 to 3 on 24 July 2026, runs 4 and 5 on 28 July, all on signet: three idle invoices, then a VTXO queued into the next round by cooperative exit, then an invoice every ten seconds until the exit settled and for a minute after.
 
-| | Run 1, 17:00 | Run 2, 17:32 | Run 3, 18:16 | Run 4, 14:24 |
-| --- | --- | --- | --- | --- |
-| Idle worst | 1,848 ms | 2,129 ms | 1,700 ms | 2,093 ms |
-| Round settled | between +255s and +858s | +94s | +1,006s | +1,655s |
-| In-round worst | 602,812 ms, failed | 1,854 ms | 2,652 ms | 3,341 ms |
-| In-round calls | 28 | 14 | 97 | 172 |
-| Failures | 1 | 0 | 0 | 0 |
-| Verdict | blocked | clean | clean | clean |
+| | Run 1, 17:00 | Run 2, 17:32 | Run 3, 18:16 | Run 4, 14:24 | Run 5, 15:40 |
+| --- | --- | --- | --- | --- | --- |
+| Idle worst | 1,848 ms | 2,129 ms | 1,700 ms | 2,093 ms | 2,141 ms |
+| Round settled | between +255s and +858s | +94s | +1,006s | +1,655s | +476s |
+| In-round worst | 602,812 ms, failed | 1,854 ms | 2,652 ms | 3,341 ms | 3,225 ms |
+| In-round calls | 28 | 14 | 97 | 172 | 54 |
+| Failures | 1 | 0 | 0 | 0 | 0 |
+| Verdict | blocked | clean | clean | clean | clean |
 
 Run 3 was designed to test the explanation that run 2 suggested — that the block goes with a slow round. It does not. Run 3's round took 1,006 seconds, longer than run 1's round could possibly have been, and 97 invoices went through it without one exceeding 2.7 seconds. Round duration does not predict the block.
 
 Run 4 puts that beyond argument. Its round took 1,655 seconds, at least twice anything run 1 could have had, and 172 invoices went through it with a worst call of 3.3 seconds. It also exited a 744 sat VTXO rather than a 1,000, so a below-floor VTXO joins a round the same way.
 
-Runs 3 and 4 both carried a control. In run 4 the two wallets are near indistinguishable: median 1,661 ms on the wallet in the round against 1,635 ms on the control, across 355 calls. Joining a round does not make receive measurably slower. The control remains what localises the fault when a block next reproduces, and on a clean run it settles nothing.
+Run 5 came back the other way, settling in 476 seconds, so the four measured rounds now run 94, 476, 1,006 and 1,655 seconds with no pattern to them and every one of them clean.
+
+Runs 3, 4 and 5 all carried a control, and the two wallets come out near indistinguishable each time. Run 4: median 1,661 ms in the round against 1,635 ms on the control. Run 5: 1,630 ms against 1,654 ms, with the round wallet the faster of the two. Across those two pairings that is roughly 500 calls and a difference of about 25 ms either way. Joining a round does not make receive measurably slower. The control remains what localises the fault when a block next reproduces, and on a clean run it settles nothing.
 
 Run 1 blocked. Timeline from the moment the exit was queued:
 
@@ -85,15 +87,15 @@ Rounds block receive: no. Runs 2 and 3 both executed a round end to end with rec
 
 Slow rounds block receive: no. This was the better story after run 2, since run 1's round appeared to take 857 seconds against run 2's 94, and one unresponsive operator would explain both the long round and the lost response. Two things kill it. Run 3's round took 1,006 seconds, longer than run 1's round could have been, and stayed clean throughout. And run 1's 857 seconds was never a measurement, as noted above, so the premise was weak to begin with.
 
-So the trigger is not round execution, not round duration, and not anything else we have instrumented. What is established is narrower and still serious: a single `receive` call can block for ten minutes and then fail with `code = Internal`, it happened once in four attempts, and we cannot yet say when it will happen again.
+So the trigger is not round execution, not round duration, and not anything else we have instrumented. What is established is narrower and still serious: a single `receive` call can block for ten minutes and then fail with `code = Internal`, it happened once in five attempts, and we cannot yet say when it will happen again.
 
 `swaps.db` adds one fact about where it broke. Every `receive` writes a `receive_swaps` row stamped with `created_at_unix`, and run 1's rows line up with the probe exactly — 22 in-round rows from 17:01:18 to 17:05:21, then nothing until 17:15:45, which matches the probe's recovery sample to the second. The blocked call wrote no row at all, so it died before any swap state was persisted, consistent with failing where the error says it did: registering the receive script.
 
-Note what this does to the first, 90 second run of L2. That run stopped at +90s and read as a clean pass. Runs 2, 3 and 4 also pass cleanly, so a short window is not inherently wrong. The reason to distrust it is simpler than "it stopped too early": with a 1-in-4 failure rate, no single run of any length proves anything.
+Note what this does to the first, 90 second run of L2. That run stopped at +90s and read as a clean pass. Runs 2 to 5 also pass cleanly, so a short window is not inherently wrong. The reason to distrust it is simpler than "it stopped too early": with a 1-in-5 failure rate, no single run of any length proves anything.
 
 One difference from bark worth keeping straight. bark held a local lock. This error says `response waiter expired`, a wait on a response that never came, in the OOR receive-script registration the receive path needs. Whether that wait is in the client, the daemon or the swap server is not established, and the swap server is not in the public repository.
 
-What this means for Kesh. A one-in-four chance is the wrong way to read it, because we do not know the denominator: four runs is four, and the trigger is unidentified. But the shape of the failure is already disqualifying on its own terms. A user waiting to be paid gets a screen that hangs for ten minutes and then shows an internal error, with no warning beforehand and no way to predict it. Whether that fires on 1 receive in 3 or 1 in 300, it needs a bound and a typed error before this carries user money.
+What this means for Kesh. A one-in-five chance is the wrong way to read it, because we do not know the denominator: five runs is five, and the trigger is unidentified. But the shape of the failure is already disqualifying on its own terms. A user waiting to be paid gets a screen that hangs for ten minutes and then shows an internal error, with no warning beforehand and no way to predict it. Whether that fires on 1 receive in 3 or 1 in 300, it needs a bound and a typed error before this carries user money.
 
 The next step is not another blind run. It is to reproduce the block with an instrument that can say what was blocked. Two discriminators are now in place, and they answer different questions. Within the wallet, the probe keeps issuing invoices while one is stalled: if the overlapping calls are still served, one response was lost, and if they all stall, receive was held wallet-wide, which is the bark shape. Between wallets, the control says whether a wallet-wide stall is the wallet's own or the operator's. Run 1 could answer neither, because the serial sampler attempted nothing during the ten minutes it was stuck.
 
@@ -253,8 +255,8 @@ Verified in source, safe to build on:
 Observed once on signet, not generalisable:
 
 - every number in the results table. One operator, one afternoon, one build
-- the L2 timings. Four runs, one operator, two signet afternoons. The ten-minute block happened once. Round execution and round duration have both been ruled out as the trigger, and no replacement hypothesis has been tested, so the cause is simply unknown
-- that a wallet in a round performs the same as one outside it. Run 4 measured medians 26 ms apart across 355 calls, which is one pairing on one afternoon
+- the L2 timings. Five runs, one operator, two signet afternoons. The ten-minute block happened once. Round execution and round duration have both been ruled out as the trigger, and no replacement hypothesis has been tested, so the cause is simply unknown
+- that a wallet in a round performs the same as one outside it. Runs 4 and 5 measured medians about 25 ms apart, in opposite directions, across roughly 500 calls. Two pairings, one operator, one afternoon
 - run 1's round duration is not one of these. It was never measured. The probe could not have stamped settlement before the block cleared, so all that is known is that the round settled between +255s and +858s
 - the boarding fee of 255 on 2,000 sats
 - `progress.preimage` empty on a completed Lightning send. This may be a path-specific gap rather than a missing feature
