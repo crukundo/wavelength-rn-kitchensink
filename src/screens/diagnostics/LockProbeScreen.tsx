@@ -97,7 +97,11 @@ const MODES: Record<
   long: {
     label: 'Long',
     intervalMs: 10_000,
-    capMs: 30 * 60_000,
+    // 45 minutes, not 30. Run 4's round took 1,655 seconds against a 1,800
+    // second cap, and the four measured rounds run 94, 1,006 and 1,655
+    // seconds. A round that outlasts the window costs a VTXO and returns a
+    // run that only covers waiting for a round, never one executing.
+    capMs: 45 * 60_000,
     tailMs: 60_000,
   },
 };
