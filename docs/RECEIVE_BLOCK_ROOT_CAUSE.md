@@ -76,7 +76,25 @@ First, `mailbox/` and `serverconn/` are byte-identical between v0.1.0 and main. 
 
 Second, PR 1044 says explicitly that it does not touch "the credit registry's missing per-call timeout or its blocking-mailbox head-of-line issue". Head-of-line blocking is the difference between one lost call and a wallet that cannot receive at all, which is exactly what our probe was built to measure.
 
-The two server-side legs, lumos#699 and swapdk-server#245, are in private repositories. We cannot check whether the signet operator got its matching keepalive enforcement policy, and without it the client-side pings would be answered with `GOAWAY too_many_pings`.
+## The server side, measured from outside
+
+PR 1044 does not stand alone, and the review thread on it matters as much as the commit. A bot flagged that 30s pings with `PermitWithoutStream` would be refused by a stock grpc-go server, and Roasbeef confirmed it (comment 3634720123): at that moment neither lumosd nor swapdk-server set a `grpc.KeepaliveEnforcementPolicy`, so both fell back to the default and would answer waved's new pings with `GOAWAY too_many_pings`. He opened lumos#699 and swapdk-server#245 to add `MinTime: 15s, PermitWithoutStream: true`, and said they had to land before the client change shipped. Both are private repositories, so we cannot read whether they were deployed.
+
+We measured it instead. `scripts/operator-keepalive-probe.py` speaks raw HTTP/2 to the operator, opens no stream, makes no RPC and sends nothing but PING frames.
+
+| Interval | Pings | Result |
+| --- | --- | --- |
+| 1.35s | 4 | `GOAWAY ENHANCE_YOUR_CALM too_many_pings` at 4.4s |
+| 5s | 3 | all acknowledged |
+| 30s | 6 | all acknowledged |
+
+The 30-second run is the one that decides it, and the reasoning is not the obvious one. grpc-go's `defaultPingTimeout` is 2 hours, not 2 seconds (`internal/transport/http2_server.go`). With `PermitWithoutStream` false, every streamless ping after the first strikes no matter how far apart they are, and `GOAWAY` fires on the third strike — the fourth ping. Six pings survived, so `PermitWithoutStream` is true and the enforcement policy is deployed on the signet operator.
+
+The other two rows discriminate nothing on their own, and an earlier reading of them was wrong. Three pings cannot conclude, because the fourth is the earliest that can end a connection. And a 1.35s interval violates the old default and lumos#699's 15s `MinTime` alike. They are recorded because together they bound `MinTime` between 1.35 and 30 seconds, which is consistent with the 15s the follow-up PRs set.
+
+So the blocker the review thread raised does not apply here. A build carrying PR 1044 would be safe against this operator rather than churning against it, which removes the main risk from testing one.
+
+The certificate is `CN=lumosd-signet.staging.lightningcluster.com`, issued by Amazon RSA 2048 M04, with `signet.wavelength.lightning.finance` in the SAN. An AWS-issued certificate means something AWS terminates TLS, so in principle a load balancer could be answering these pings rather than lumosd. The `GOAWAY` behaviour matches grpc-go's strike counter exactly, which argues against that, but it is not proof.
 
 ## What this changes
 
@@ -120,6 +138,6 @@ Two cautions. The blackhole is host-wide, so Bob hits it too and is not a valid 
 ## What is still unknown
 
 - whether run 1 was a dead connection or a single lost response. The forced reproduction and the concurrent sampler both bear on this
-- whether the signet operator has the server-side keepalive enforcement. Private repositories, so only Lightning Labs can say
+- whether lumosd itself answered our pings, or an AWS load balancer in front of it. The strike pattern matches grpc-go exactly, but the certificate is Amazon-issued
 - whether a ten-minute waiter TTL is intended as the outer bound for a user-facing call, or is a safety net that was never meant to be reached
 - whether the automatic VTXO refresh path shares this code path. Still untriggerable from a client

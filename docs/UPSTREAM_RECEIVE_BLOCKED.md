@@ -63,6 +63,8 @@ Two asks, both small.
 
 First, v0.1.0 does not have #1044. It is tagged at `ff510b11` from 21 July and the fix merged on 23 July; `v0.1.x-branch` has no backport and v0.1.0 is the only release. Anyone building a client against the released tag still dials the operator with no keepalive. Is a v0.1.1 planned, or should integrators build from main?
 
+On the concern you raised in the #1044 review, the signet operator does now accept the pings. We checked from outside with raw HTTP/2 PING frames, no stream open and no RPC: six pings 30 seconds apart were all acknowledged with no `GOAWAY`. Under the default policy the fourth would have ended the connection, since `defaultPingTimeout` is 2 hours and every streamless ping strikes. Four pings at 1.35 seconds did draw `GOAWAY too_many_pings`, which puts `MinTime` somewhere under 30 seconds and is consistent with the 15s in lumos#699. So that leg looks deployed, at least on signet.
+
 Second, keepalive bounds the common case but not the waiter. `mailbox/` and `serverconn/` are unchanged between v0.1.0 and main, so a response lost for any other reason still strands the caller for ten minutes. Is a ten-minute TTL intended as the outer bound for a user-facing call, or is it a safety net that was never meant to be reached? From a client we cannot set it — `ResponseWaiterTTL` takes the default everywhere and nothing exposes it.
 
 We can bound our own calls with a context deadline, and we will. But `code = Internal` after ten minutes is not something a wallet can show someone waiting to be paid, so a typed, retryable error at the point the wait gives up would help.

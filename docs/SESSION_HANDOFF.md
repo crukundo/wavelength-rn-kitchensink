@@ -173,6 +173,8 @@ Force the failure instead of waiting for it. That is the change of 28 July: the 
 
 The procedure and the predicted outcomes are in the reproduction section of [RECEIVE_BLOCK_ROOT_CAUSE.md](RECEIVE_BLOCK_ROOT_CAUSE.md). In short: start the probe on Alice in fast mode with no exit, run `sudo scripts/operator-blackhole.sh window 0 60`, then read `__l2probe`.
 
+Testing a build from main is now less risky than it looked. The #1044 review thread warned that its 30s keepalive pings would be refused by a server without a matching enforcement policy, and the follow-up PRs are in private repositories. `scripts/operator-keepalive-probe.py` measured it from outside on 28 July: six pings 30 seconds apart, no stream open, all acknowledged, no `GOAWAY`. The policy is deployed on signet, so a main build would not churn against this operator.
+
 The headline result to look for is a call that hangs the full ten minutes even though the network came back after one. If that happens, one minute of network trouble produces a ten-minute user-visible hang, which is the product argument in a single line. If instead the call recovers when the network returns, the response was durable and redelivered, and run 1's was lost for some other reason — which is a genuinely new finding.
 
 Two cautions. The blackhole is host-wide, so Bob is not a valid control while it is on. And it changes the host firewall: check `status` and run `off` afterwards.
