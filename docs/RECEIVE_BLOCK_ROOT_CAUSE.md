@@ -63,8 +63,8 @@ lumosd is our operator. `signet.wavelength.lightning.finance` is a CNAME to `lum
 ## The fix is not in the build we run
 
 - v0.1.0 is commit `ff510b11`, dated 21 July 2026. PR 1044 merged 23 July.
-- `v0.1.x-branch` head is `7cbef62b`, also 21 July. There is no backport.
-- v0.1.0 is the only release.
+- `v0.1.x-branch` head is `7cbef62b`, also 21 July. There is no backport of #1044 yet, though 20 other `backport-*` branches show a point-release process in motion — expect a v0.1.1 rather than treating the tag as final.
+- v0.1.0 is the only release as of 28 July 2026.
 
 So our daemon dials the operator with no keepalive. A connection that goes silently stale reports READY indefinitely while every RPC on it hangs.
 

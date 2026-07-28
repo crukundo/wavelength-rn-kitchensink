@@ -18,7 +18,9 @@ Three things, and nothing else in the old draft is worth keeping:
 
 - the same failure reaches a second path, `NewReceiveScript` to the indexer, not just credit admission
 - it was hit from a mobile client on the released v0.1.0, which does not carry the fix
-- the fix is main-only. There is no v0.1.1 and no backport on `v0.1.x-branch`, so anyone building against the released tag still has an unprotected operator connection
+- the fix is main-only. There is no v0.1.1 and no backport of #1044 on `v0.1.x-branch`, so anyone building against the released tag still has an unprotected operator connection
+
+Keep the tone in proportion. Twenty `backport-*-to-v0.1.x-branch` branches show a point-release process in motion, the whole 1041 fix chain shipped in about 48 hours, and we measured the server-side leg already deployed. They are on it. The comment reports and asks one design question; it does not chase a roadmap.
 
 Everything below the line is the comment text.
 
@@ -40,7 +42,6 @@ The failing hop is `RegisterReceiveScriptTaproot` (`waved/receive_script.go:477`
 
 It happened once in five runs of the same procedure: signet, `signet.wavelength.lightning.finance`, 24 July 2026, blocked call about 14:05:21 to 14:15:45 UTC. The other four runs were clean, worst call 3,341 ms across 337 invoices. The blocked call wrote no `receive_swaps` row, so it failed before any swap state was persisted. Client: v0.1.0 (`ff510b11`) via `wavelength-react-native` 0.1.0, React Native 0.81.5, iOS 18.6 simulator.
 
-Two questions:
+Two small things that may be useful. Since we are on the released tag, we noticed #1044 has no `backport-1044-to-v0.1.x-branch` yet while many neighbouring PRs do — flagging it in case that is an oversight rather than a decision. And on the deployment concern in the #1044 review: the signet operator now accepts streamless 30s pings — we sent six in a row over raw HTTP/2, all acked, no `GOAWAY` — so the lumos#699 leg looks live.
 
-1. v0.1.0 does not carry #1044 and `v0.1.x-branch` has no backport. Is a v0.1.1 planned, or should integrators build from main? On the concern in the #1044 review: the signet operator now accepts streamless 30s pings — we sent six in a row over raw HTTP/2 and all were acked with no `GOAWAY`, so lumos#699 looks deployed.
-2. Keepalive bounds the common case but not the waiter. `mailbox/` and `serverconn/` are unchanged on main, so a lost response still strands the caller for ten minutes, and nothing exposes `ResponseWaiterTTL`. Is ten minutes intended as the outer bound for a user-facing call? We can add our own context deadline, but a typed, retryable error at expiry would help — `code = Internal` after ten minutes is not something a wallet can show someone waiting to be paid.
+One question, when someone has a moment. Is the ten-minute `DefaultResponseWaiterTTL` intended as the outer bound for user-facing calls, or a safety net that was never meant to be reached? Keepalive shortens the dead-connection case, but a response lost for any other reason still waits out the full TTL, and nothing exposes it to configure. No urgency on our side — we are wrapping our calls in a shorter context deadline in the meantime.
