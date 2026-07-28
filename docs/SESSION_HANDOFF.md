@@ -32,7 +32,11 @@ Built this session. It lives in the app at Settings, Diagnostics, Lock probe (`s
 
 Why it exists: the SDK has no refresh RPC, so a round cannot be requested. The only round work a client can start on demand is a cooperative exit, which "queues each outpoint into the next round" (`wavelength-core exit.d.ts:5`). The probe uses that as its trigger.
 
-What it does: takes 3 idle invoice timings, starts the exit without awaiting it, then times an invoice on a fixed interval and watches `pending_out_sat` to detect when the round settles.
+What it does: takes 3 idle invoice timings, starts the exit without awaiting it, then dispatches an invoice on a fixed interval and watches `pending_out_sat` on a separate 5-second poll to detect when the round settles.
+
+Calls are dispatched on the clock and not awaited, up to 4 outstanding at once. That is the discrimination the probe exists for. If a call stalls and the calls started during it are still served, one response was lost. If they all stall, receive was held wallet-wide, which is the bark failure. The serial version could say neither, which is why run 1 proves less than it appears to.
+
+That change landed on 28 July 2026 and is verified on both wallets, without spending anything. Two control runs at the 3-second interval ran 33 calls each with no failures and exactly 3.0s spacing. A forced-overlap run at a temporary 1-second interval ran 92 calls on Alice with up to 3 in flight, no failures, 1.26 to 2.07 seconds each against 1.36 to 2.08 seconds for the same calls one at a time. Concurrent receives do not slow each other on a healthy wallet, which is what makes a joint stall meaningful.
 
 Three modes:
 
@@ -51,7 +55,9 @@ debugger-connect  (see logicalDeviceIds below)
 debugger-evaluate: globalThis.__l2probe
 ```
 
-The object carries `mode`, `phase`, `joinAt`, `settledAt`, `joinNote`, `samples` (each `{t, ms, ok, detail}`), and captured SDK `logs`. Stamp offsets as `(sample.t - joinAt)/1000`.
+The object carries `mode`, `control`, `phase`, `joinAt`, `settledAt`, `joinNote`, `samples`, the schedule it ran (`intervalMs`, `maxInFlight`, `settlePollMs`), what it actually did (`maxInFlightSeen`, `skipped`), and captured SDK `logs`. Stamp offsets as `(sample.t - joinAt)/1000`.
+
+Each sample is `{id, t, ms, ok, detail, overlap}`. `t` is when the call started, `overlap` is how many calls were already outstanding when it started, and `ms` and `ok` are `null` while a call is still in flight — so a stall is readable while it is happening, not only after it ends. `skipped` counts slots dropped at the concurrency cap; a run that reports any is one where the wallet was already saturated.
 
 ## The three L2 runs
 
@@ -59,15 +65,17 @@ All 24 July 2026, signet, one operator. 1,000 sat VTXO exited each time.
 
 | | Run 1 | Run 2 | Run 3 |
 | --- | --- | --- | --- |
-| Round settled | +857s | +94s | +1,006s |
+| Round settled | between +255s and +858s | +94s | +1,006s |
 | In-round calls | 28 | 14 | 97 |
 | Worst call | 602,812 ms, failed | 1,854 ms | 2,652 ms |
 | Verdict | blocked | clean | clean |
 
+Run 1's round was never measured. The old serial sampler only checked settlement after a call returned, and nothing returned for ten minutes, so its recorded +857s is an upper bound stamped when the block cleared. Read the L2 section of the test framework before quoting it: the apparent coincidence between the block clearing and the round settling was the instrument.
+
 Ruled out as the trigger:
 
 - round execution — runs 2 and 3 both executed rounds with receive untouched
-- round duration — run 3's round was the longest of the three and stayed clean
+- round duration — run 3's round was longer than run 1's could have been, and stayed clean
 
 Run 3 carried a control (Bob): 99 overlapping calls, worst 1,803 ms, no failures. Because run 3 did not block, the control localised nothing this time. It stays in place for the next run.
 
@@ -120,6 +128,8 @@ Everything is committed. Branch `main`, nothing pushed. Remote is `crukundo/wave
 Commits this session, newest first:
 
 ```
+36b52ba Probe through a stall instead of stopping at it
+6b836f1 Update session handoff for the L2 investigation
 9cdcff6 Run 3 rules out slow rounds; trigger unknown
 15f0a9b Add control mode so a second wallet can discriminate the cause
 9cc1c41 Capture SDK logs, and record that daemon logs are unreachable
@@ -145,9 +155,11 @@ Tag `v0.1.0` is commit `6ff371852ff93044ffeab201fbb61a87520ef67e`. Every file an
 
 ## The next step
 
-Run the long probe on Alice with the control running on Bob, repeatedly, until the block reproduces. Then read Bob's `__l2probe` immediately.
+Run the long probe on Alice with the control running on Bob, repeatedly, until the block reproduces. Then read both `__l2probe` objects immediately.
 
-That single comparison is the whole point. Alice blocks and Bob does not means the wait is client-side, inside the wallet — Lightning Labs' bug. Both block together means it is the operator — a different report to a different place. Nothing else we can measure separates those two.
+Two questions get answered, in this order. First, from Alice alone: did the calls that started during the stall still get served? If they did, one response was lost. If they all stalled, receive was held wallet-wide, which is the bark failure. Second, from Bob: if Alice stalled wallet-wide, did Bob stall at the same moment? Alice alone means the wait is inside that wallet — Lightning Labs' bug. Both together means it is the operator — a different report to a different place.
+
+The first question is new, and it is the one run 1 could not answer. The probe now reports its own answer on screen, so a reproduction is readable without exporting anything.
 
 Practical notes for the run:
 

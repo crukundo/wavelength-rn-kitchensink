@@ -12,10 +12,12 @@ Reproduced once in three runs. The two candidate causes we could name have both 
 
 We saw one `receive` call block for 602,812 ms — ten minutes — and then fail with `code = Internal`. It reproduced once in three runs of the same procedure on the same wallet against the same operator.
 
-We are not claiming a cause. We tried two and ruled both out:
+We are not claiming a cause, and we are not claiming the round caused it. The block happened while a cooperative exit was outstanding, which is how we came to be watching, but two runs of the same procedure executed rounds with receive untouched.
+
+We tried two explanations and ruled both out:
 
 - **not round execution.** The block happened with a cooperative exit outstanding, but the two clean runs also executed rounds end to end, one of them across 97 invoices
-- **not a slow or degraded operator.** The blocked run's round took 857 seconds, which suggested the operator was struggling. The third run's round took 1,006 seconds — longer — and no call exceeded 2,652 ms
+- **not a slow or degraded operator.** The third run's round took 1,006 seconds, longer than the blocked run's round could have been, and no call exceeded 2,652 ms
 
 So this is a symptom report. A `receive` can hang for ten minutes and return an untyped internal error, and we cannot predict when.
 
@@ -42,8 +44,10 @@ Run 1, timeline measured from the moment the exit was queued. Idle baseline 1,41
 | --- | --- |
 | +0s to +243s | 22 invoices, 1,222 to 2,421 ms. Indistinguishable from the baseline |
 | +255s | One invoice blocks for **602,812 ms** — ten minutes three seconds — then fails |
-| +857s | `pending_out_sat` returns to zero: the exit has settled, so the round executed |
+| +857s | `pending_out_sat` is first seen back at zero: the exit had settled, so the round executed at some point after +255s |
 | +867s to +913s | 5 invoices, 1,233 to 1,722 ms. Fully recovered |
+
+One caveat on that third row, since it would otherwise read as the block ending exactly when the round did. Our probe checked the balance only after an invoice call returned, and no call returned between +255s and +858s, so it could not have observed settlement any earlier than it did. The round settled somewhere in that window. We are not claiming the two events coincided.
 
 Runs 2 and 3, same procedure, same wallet, later the same afternoon.
 
@@ -92,4 +96,6 @@ Two things made this harder to investigate than it needed to be. Happy to file e
 
 ## Reproduction harness
 
-We built a small probe for this and can share it if useful: it takes baseline timings, starts the cooperative exit without awaiting it, then times an invoice every ten seconds until `pending_out_sat` returns to its pre-exit level, plus a minute after. One in two runs so far has shown the block, so expect to run it several times.
+We built a small probe for this and can share it if useful: it takes baseline timings, starts the cooperative exit without awaiting it, then dispatches an invoice every ten seconds — on the clock, without waiting for the previous one — until `pending_out_sat` returns to its pre-exit level, plus a minute after. One run in three has shown the block, so expect to run it several times.
+
+Dispatching without waiting is deliberate, and we would suggest it to anyone trying to reproduce this. Our first version awaited each call, so the ten-minute block was ten minutes in which nothing else was attempted, and the run cannot distinguish one call losing its response from every receive being blocked. The current version keeps issuing calls during a stall, capped at four outstanding. For reference, on a healthy wallet we measured 92 invoices with up to three in flight at 1.26 to 2.07 seconds each, against 1.36 to 2.08 seconds issued one at a time — concurrency alone does not slow this path.

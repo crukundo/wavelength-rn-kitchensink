@@ -42,13 +42,13 @@ All three runs, 24 July 2026 on signet: three idle invoices, then a 1,000 sat VT
 | | Run 1, 17:00 | Run 2, 17:32 | Run 3, 18:16 |
 | --- | --- | --- | --- |
 | Idle worst | 1,848 ms | 2,129 ms | 1,700 ms |
-| Round settled | +857s | +94s | +1,006s |
+| Round settled | between +255s and +858s | +94s | +1,006s |
 | In-round worst | 602,812 ms, failed | 1,854 ms | 2,652 ms |
 | In-round calls | 28 | 14 | 97 |
 | Failures | 1 | 0 | 0 |
 | Verdict | blocked | clean | clean |
 
-Run 3 was designed to test the explanation that run 2 suggested — that the block goes with a slow round. It does not. Run 3's round took 1,006 seconds, longer than the run that blocked, and 97 invoices went through it without one exceeding 2.7 seconds. Round duration does not predict the block.
+Run 3 was designed to test the explanation that run 2 suggested — that the block goes with a slow round. It does not. Run 3's round took 1,006 seconds, longer than run 1's round could possibly have been, and 97 invoices went through it without one exceeding 2.7 seconds. Round duration does not predict the block.
 
 Run 3 also carried a control. Bob probed continuously on a second wallet throughout, joining no round: 99 overlapping calls, worst 1,803 ms, no failures. That control is now in place for future runs and is the thing that will localise the fault when the block next reproduces — but on a run where Alice never blocked, it settles nothing.
 
@@ -58,7 +58,7 @@ Run 1 blocked. Timeline from the moment the exit was queued:
 | --- | --- |
 | +0s to +243s | 22 invoices, 1,222 to 2,421 ms. Indistinguishable from idle |
 | +255s | One invoice hung for 602,812 ms — ten minutes and three seconds — then failed |
-| +857s | The exit settled. The round had executed |
+| +857s | The probe first saw the exit settled. The round had executed at some point since +255s |
 | +867s to +913s | Five invoices, 1,233 to 1,722 ms. Fully recovered |
 
 The failure, in full:
@@ -71,13 +71,17 @@ unable to create OOR receive script: register receive script:
 response waiter expired
 ```
 
-Within run 1 the timing is striking. The block began at +255s and cleared at about +858s; the round settled at +857s. Nothing was wrong before it and nothing was wrong after it.
+Within run 1 the timing looked striking, and it was an artifact. The block began at +255s and cleared at about +858s, and the probe recorded the round settling at +857s — one second earlier. That reads as the block ending the moment the round did. It cannot mean that. The probe checked `pending_out_sat` only after a sample returned, and no sample returned between +255s and +858s, so the earliest it could possibly have stamped settlement was the moment the block cleared. The round settled somewhere between +255s and +858s and we do not know where.
+
+This was found on 28 July 2026, reading the probe source rather than the data. The instrument has since been fixed: settlement now runs on its own five-second poll, independent of the samples. Nothing in runs 2 and 3 is affected, because neither had a call long enough to starve the check.
+
+What it costs us is the only thing that tied the block to the round at all. What remains is that the block happened while a round was outstanding, which two clean runs show is not sufficient on its own. Nothing was wrong before it and nothing was wrong after it.
 
 Two hypotheses came out of that, and run 3 killed both of the simple ones.
 
 Rounds block receive: no. Runs 2 and 3 both executed a round end to end with receive untouched, run 3 across 97 calls.
 
-Slow rounds block receive: no. This was the better story after run 2, since run 1's round took 857 seconds against run 2's 94, and one unresponsive operator would explain both the long round and the lost response. Run 3's round took 1,006 seconds, longer than the one that blocked, and stayed clean throughout.
+Slow rounds block receive: no. This was the better story after run 2, since run 1's round appeared to take 857 seconds against run 2's 94, and one unresponsive operator would explain both the long round and the lost response. Two things kill it. Run 3's round took 1,006 seconds, longer than run 1's round could have been, and stayed clean throughout. And run 1's 857 seconds was never a measurement, as noted above, so the premise was weak to begin with.
 
 So the trigger is not round execution, not round duration, and not anything else we have instrumented. What is established is narrower and still serious: a single `receive` call can block for ten minutes and then fail with `code = Internal`, it happened once in three attempts, and we cannot yet say when it will happen again.
 
@@ -89,17 +93,21 @@ One difference from bark worth keeping straight. bark held a local lock. This er
 
 What this means for Kesh. A one-in-three chance is the wrong way to read it, because we do not know the denominator: three runs is three, and the trigger is unidentified. But the shape of the failure is already disqualifying on its own terms. A user waiting to be paid gets a screen that hangs for ten minutes and then shows an internal error, with no warning beforehand and no way to predict it. Whether that fires on 1 receive in 3 or 1 in 300, it needs a bound and a typed error before this carries user money.
 
-The next step is not another blind run. It is to run with the control in place until the block reproduces, because the control is what says whether the wait is inside the wallet or at the operator — and that determines whether this is Lightning Labs' bug or their operator's.
+The next step is not another blind run. It is to reproduce the block with an instrument that can say what was blocked. Two discriminators are now in place, and they answer different questions. Within the wallet, the probe keeps issuing invoices while one is stalled: if the overlapping calls are still served, one response was lost, and if they all stall, receive was held wallet-wide, which is the bark shape. Between wallets, the control says whether a wallet-wide stall is the wallet's own or the operator's. Run 1 could answer neither, because the serial sampler attempted nothing during the ten minutes it was stuck.
 
 Two further notes from the earlier short run. The exit produced no activity entry at all, consistent with wavelength#875 and the note under events and polling in the constraints document: the balance moved with nothing in the history to explain it. And the codebase does bound several waits (`replayRoundRegisterTimeout`, the prepared-send TTL, poll caps), which is consistent with what was measured but was not itself the thing tested.
 
-The probe lives under Settings, Diagnostics. Three things it settled about how L2 has to be run.
+The probe lives under Settings, Diagnostics. Four things it settled about how L2 has to be run.
 
 The SDK has no refresh RPC, so a round join cannot be requested. The only operation a client can start on demand that does round work is a cooperative exit, which "queues each outpoint into the next round" (`exit.d.ts:5`). That is the trigger, and it costs a VTXO per run: its value leaves Ark for the on-chain backing wallet.
 
 That carries a caveat which must travel with any result. The probe measures whether round work blocks receive, entering the round by the cooperative-exit path. The automatic refresh at the needs_refresh threshold is a different caller into what is probably the same machinery, and cannot be triggered. A clean run is evidence that receive is not serialised behind a round. It is not proof that the refresh path behaves identically.
 
 An earlier version of this test asked for invoices on Bob as well as Alice. Bob is a separate app container running a separate daemon with its own lock, so Bob's invoice creation cannot show anything about Alice's. It is still worth watching, but as a different question: Alice blocked means a client-side lock, the bark failure. Bob blocked at the same moment means operator-side contention, which is a separate and also serious problem.
+
+Calls must not wait for each other. This is the correction of 28 July 2026. The probe used to await each invoice before starting the next, which is why run 1 spent ten minutes attempting nothing and why its settlement time is an upper bound rather than a measurement. It now dispatches on the clock, up to four calls outstanding, so a stall is measured while it is happening. The cap matters: at a ten-second interval an unbounded loop would leave sixty calls outstanding across a ten-minute stall, and the probe would be load-testing the daemon rather than timing it.
+
+That change also produced a baseline worth recording. On 28 July, at a temporary one-second interval, 92 invoices ran on Alice with up to three outstanding at once: 1.26 to 2.07 seconds each, against 1.36 to 2.08 seconds for the same calls issued one at a time. Concurrent receives do not slow each other here, so if overlapping calls ever do stall together, that is a real change of behaviour and not the probe's own load.
 
 ## How Wavelength handles balances
 
@@ -193,7 +201,7 @@ From the Alice and Bob session on 24 July 2026, signet.
 
 | ID | Result | Evidence |
 | --- | --- | --- |
-| L2 | Inconclusive, 1 block in 3 runs | Run 1, 17:00: round settled +857s, one invoice hung 602,812 ms and failed with `response waiter expired`. Run 2, 17:32: round +94s, clean. Run 3, 18:16: round +1,006s — longer than the blocked run — 97 calls, worst 2,652 ms, clean, with a second-wallet control also clean across 99 overlapping calls. No measured variable predicts the block |
+| L2 | Inconclusive, 1 block in 3 runs | Run 1, 17:00: one invoice hung 602,812 ms and failed with `response waiter expired`, with a round outstanding that settled at some point between +255s and +858s. Run 2, 17:32: round +94s, clean. Run 3, 18:16: round +1,006s — longer than run 1's round could have been — 97 calls, worst 2,652 ms, clean, with a second-wallet control also clean across 99 overlapping calls. No measured variable predicts the block |
 | L2 (first attempt) | Void | Alice, 16:47, 90 second window. Cannot distinguish a fast round from a slow one, so it proves nothing either way |
 | R1 | Pass | Repeated 1,000 sat receives on Bob, 15:34 to 15:38 |
 | R2 | Partial | 500 sats arrived as credit at 13:34. The second half of the pass condition, that the credit is then spendable, was never tested |
@@ -244,6 +252,7 @@ Observed once on signet, not generalisable:
 
 - every number in the results table. One operator, one afternoon, one build
 - the L2 timings. Three runs, one operator, one signet afternoon. The ten-minute block happened once. Round execution and round duration have both been ruled out as the trigger, and no replacement hypothesis has been tested, so the cause is simply unknown
+- run 1's round duration is not one of these. It was never measured. The probe could not have stamped settlement before the block cleared, so all that is known is that the round settled between +255s and +858s
 - the boarding fee of 255 on 2,000 sats
 - `progress.preimage` empty on a completed Lightning send. This may be a path-specific gap rather than a missing feature
 
@@ -253,7 +262,8 @@ Inference or inherited, must not be quoted as fact:
 - that the operator reclaims the on-chain backing at batch expiry. Inherited from Kesh's bark findings and general Ark semantics. The Wavelength source shows the client marking the VTXO failed, not what the operator does
 - that change re-minting moves the balance. Consistent with the coin-selection model and with the failure we saw, not separately traced
 - the reading that a failed send burns the payee's receive intent. The error comes from the swap server, which is not in the public repository
-- where the ten-minute receive block in L2 actually lives. The error is `response waiter expired` on an OOR receive-script registration, which is a wait on a response rather than the local mutex bark held. The client, the daemon and the swap server are all candidates, and the swap server is not in the public repository. What is observed is the block and its coincidence with the round; the mechanism is not
+- where the ten-minute receive block in L2 actually lives. The error is `response waiter expired` on an OOR receive-script registration, which is a wait on a response rather than the local mutex bark held. The client, the daemon and the swap server are all candidates, and the swap server is not in the public repository. What is observed is one call blocking while a round was outstanding; the mechanism is not
+- that the block has anything to do with the round beyond happening during one. The apparent coincidence of the block clearing as the round settled was the serial sampler, not the system. Two of three runs executed rounds with receive untouched
 
 Known gaps in the matrix itself: of 22 tests, six have results and one of those is partial. The other 16 have never been run, and every lifecycle test is among them.
 
