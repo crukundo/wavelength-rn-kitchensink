@@ -1,37 +1,108 @@
-# Session handoff — 24 July 2026
+# Session handoff — 28 July 2026
 
-Where the Wavelength evaluation stands, and what to pick up next. Written to be read cold.
+Where the Wavelength evaluation stands, and what to pick up next. Written to be read cold. Supersedes the 24 July handoff.
 
 ## Why this work exists
 
-Kesh removed its Bitcoin integration on 20 July 2026 (`/Users/rukundo/Desktop/kesh/docs/bitcoin-shelved.md`). Ark via the bark SDK was judged too early, for two specific reasons rather than a general sense of risk:
+Kesh removed its Bitcoin integration on 20 July 2026 (`/Users/rukundo/Desktop/kesh/docs/bitcoin-shelved.md`). Ark via the bark SDK was judged too early for two specific reasons:
 
 - VTXO expiry silently swept funds from an inactive wallet, and bark still reported the swept VTXOs as spendable — 41,989 sats displayed that the user no longer had
 - `wallet.maintenance()` waited on server rounds with no timeout, holding the wallet lock and blocking invoice creation, so users could not receive
 
-This repo is the harness for evaluating whether Lightning Labs' Wavelength answers those two failures well enough to carry Kesh user money. The target is a Lightning wallet for every Kesh user: reliable onramp, paying Lightning invoices and LNURLs, and on-chain bitcoin.
+This repo is the harness for deciding whether Lightning Labs' Wavelength answers those two failures well enough to carry Kesh user money. The two failures are tests L1 and L2 in the framework below.
+
+## Headline: where the two questions stand
+
+- L1, the phantom balance, is answered by design while the wallet runs. A per-VTXO expiry state machine, spendable traced as Live-only. Not yet tested through a real closure. See the confidence register.
+- L2, the maintenance block, is the live thread and is not settled. On one run of three, receive blocked for ten minutes and failed with an internal error — the same user-visible failure that shelved Ark. The other two runs were clean. We have ruled out two candidate causes and do not yet know the trigger.
+
+If you read nothing else, read the L2 section of [PAYMENT_TEST_FRAMEWORK.md](PAYMENT_TEST_FRAMEWORK.md) and the "next step" at the end of this handoff.
 
 ## Read these first
 
-- [PAYMENT_TEST_FRAMEWORK.md](PAYMENT_TEST_FRAMEWORK.md) — the two decisive questions, the balance model, and a 22-test matrix with pass conditions. Six tests already have results
-- [WAVELENGTH_CONSTRAINTS.md](WAVELENGTH_CONSTRAINTS.md) — every limit verified against source, with provenance markers. Three earlier entries were wrong and are marked as corrections
+- [PAYMENT_TEST_FRAMEWORK.md](PAYMENT_TEST_FRAMEWORK.md) — the two decisive questions, the balance model, the 22-test matrix, and all three L2 runs
+- [WAVELENGTH_CONSTRAINTS.md](WAVELENGTH_CONSTRAINTS.md) — every limit verified against source, with provenance markers
+- [UPSTREAM_RECEIVE_BLOCKED.md](UPSTREAM_RECEIVE_BLOCKED.md) — the draft GitHub issue for the L2 block, ready to file
 
-Do not trust any constraint in those docs that is not marked Source. The Observed and Unverified entries are exactly that.
+Do not trust any constraint not marked Source. The confidence register in the test framework is the authoritative list of what is verified, seen once, or inferred. Read it before quoting any finding.
 
-Both documents were audited against the source on 24 July 2026, after they were written. The audit found one factual error and one overclaim, both corrected. The confidence register in the test framework is the authoritative list of what is verified, what was seen once, and what is inference. Read it before quoting any finding to anyone.
+## The L2 lock probe
+
+Built this session. It lives in the app at Settings, Diagnostics, Lock probe (`src/screens/diagnostics/LockProbeScreen.tsx`).
+
+Why it exists: the SDK has no refresh RPC, so a round cannot be requested. The only round work a client can start on demand is a cooperative exit, which "queues each outpoint into the next round" (`wavelength-core exit.d.ts:5`). The probe uses that as its trigger.
+
+What it does: takes 3 idle invoice timings, starts the exit without awaiting it, then times an invoice on a fixed interval and watches `pending_out_sat` to detect when the round settles.
+
+Three modes:
+
+- Fast: 3s interval, 90s window. Do not trust it alone — with a 1-in-3 failure rate no single short run proves anything.
+- Long: 10s interval, runs until the exit settles plus a minute. This is the real test. A round takes 2 to 17 minutes to execute, so budget 15 to 20 minutes per run.
+- Control: joins no round, spends no VTXO. Run it on the second wallet at the same time as a real run on the first. Both hit the same operator, but each has its own daemon and lock. If only the round wallet blocks, the wait is inside that wallet. If both block together, it is the operator.
+
+Each exit costs one whole VTXO, which leaves Ark for the on-chain backing wallet. The unpaid probe invoices cost nothing and expire on their own.
+
+### Reading a run out cleanly
+
+A 15-minute run produces far more data than is readable by scrolling the phone. The probe publishes the whole run on `globalThis.__l2probe`, so pull it over the Metro debugger instead of transcribing screenshots.
+
+```
+debugger-connect  (see logicalDeviceIds below)
+debugger-evaluate: globalThis.__l2probe
+```
+
+The object carries `mode`, `phase`, `joinAt`, `settledAt`, `joinNote`, `samples` (each `{t, ms, ok, detail}`), and captured SDK `logs`. Stamp offsets as `(sample.t - joinAt)/1000`.
+
+## The three L2 runs
+
+All 24 July 2026, signet, one operator. 1,000 sat VTXO exited each time.
+
+| | Run 1 | Run 2 | Run 3 |
+| --- | --- | --- | --- |
+| Round settled | +857s | +94s | +1,006s |
+| In-round calls | 28 | 14 | 97 |
+| Worst call | 602,812 ms, failed | 1,854 ms | 2,652 ms |
+| Verdict | blocked | clean | clean |
+
+Ruled out as the trigger:
+
+- round execution — runs 2 and 3 both executed rounds with receive untouched
+- round duration — run 3's round was the longest of the three and stayed clean
+
+Run 3 carried a control (Bob): 99 overlapping calls, worst 1,803 ms, no failures. Because run 3 did not block, the control localised nothing this time. It stays in place for the next run.
+
+The failure, when it happened:
+
+```
+create receive invoice: ... unable to create OOR receive script:
+register receive script: response waiter expired
+```
+
+## Instrumentation facts, learned the hard way
+
+- Daemon logs are unreachable from this harness. `useWalletLogs` carries only SDK-level diagnostics, not daemon output. The Go daemon logs to neither that buffer, nor os_log, nor any file in its data directory. Do not spend time re-checking this.
+- `swaps.db` is the evidence source. Every `receive` writes a `receive_swaps` row stamped `created_at_unix`. In run 1 the rows matched the probe to the second, and the blocked call wrote no row at all — it died before any swap state was persisted. Path: `<app container>/Library/Application Support/wavelength/data/signet/swaps.db`.
+- VTXO inventory and states are in `waved.db`, table `vtxos`, column `amount`, `status` 0 = Live, `spent` flag. Handy for reading balance composition without the UI.
+- `pending_out_sat` does carry a cooperative exit, contrary to the code comment at `balance.ts:57`. The probe relies on this to detect settlement.
+- Raising `debugLevel` to `trace` needs a runtime restart, which lands on the unlock screen. The wallets are password-protected; the password is held by the user, not recorded here. Ask before any restart, or you risk locking a funded wallet.
 
 ## Environment
 
 Two iOS simulators, both renamed, both running the same dev build against one Metro on port 8081.
 
-| Name | Device | UDID | Theme |
-| --- | --- | --- | --- |
-| Alice | iPhone 11, iOS 18.6 | `29C47385-6C57-4ADC-B257-4D46F3029302` | light |
-| Bob | iPhone 16 Pro, iOS 18.6 | `E1A6CCCF-3B55-4A2A-B509-1B41ED3F2E42` | dark |
+| Name | Device | UDID | Metro logicalDeviceId | Theme |
+| --- | --- | --- | --- | --- |
+| Alice | iPhone 11, iOS 18.6 | `29C47385-6C57-4ADC-B257-4D46F3029302` | `f122f9f24b2934a972fb8f0556c824d9dc974dc4` | light |
+| Bob | iPhone 16 Pro, iOS 18.6 | `E1A6CCCF-3B55-4A2A-B509-1B41ED3F2E42` | `486eac1574ec81c4b3616f7e13083c03d686eb9b` | dark |
 
-Both on signet. Balances are deliberately not recorded here: they were last seen at 15:46 on 24 July 2026 and will have moved. Read them from the app rather than trusting a figure in this document. Bob had boarded twice and held credit from a 500 sat receive; Alice was funded and had been sending.
+The Metro logicalDeviceId is what `debugger-connect` needs — the UDID is rejected when two devices share one Metro.
 
-Separate simulators give separate app containers, so each wallet has its own dataDir, seed and node identity. No code changes were needed to make them distinct users.
+Balances at 13:27 on 28 July 2026, signet. They move on their own from refresh fees, so read them from the app, do not trust these:
+
+- Alice: 4,482 spendable across 3 live VTXOs (2,238, 1,500, 744), 500 credit, 2,972 on-chain backing. The 744 is below the 1,000 operator floor, so it can only leave by an exact-value exit. That gives about two more probe runs before Alice needs reboarding.
+- Bob: 26,990 spendable, 500 credit. Untouched since it was the control.
+
+Both wallets are password wallets. Separate simulators give separate app containers, so each wallet has its own dataDir, seed and node identity.
 
 To add another wallet, install the existing build rather than rebuilding:
 
@@ -42,65 +113,56 @@ xcrun simctl install <udid> \
 
 Then launch it and pick `http://localhost:8081` in the dev launcher.
 
-Two environment changes to be aware of: both simulators were renamed with `xcrun simctl rename`, and Bob's simulator OS appearance was set to dark via `xcrun simctl ui`. Both are cosmetic and reversible.
+## Git state
 
-## Uncommitted work
+Everything is committed. Branch `main`, nothing pushed. Remote is `crukundo/wavelength-rn-kitchensink`; pushing is the user's call.
 
-Nothing is committed. Branch is `main` at `fed4910`.
+Commits this session, newest first:
 
-New:
-- `docs/PAYMENT_TEST_FRAMEWORK.md`
-- `docs/WAVELENGTH_CONSTRAINTS.md`
-- `src/screens/activity/ActivityDetail.tsx`
+```
+9cdcff6 Run 3 rules out slow rounds; trigger unknown
+15f0a9b Add control mode so a second wallet can discriminate the cause
+9cc1c41 Capture SDK logs, and record that daemon logs are unreachable
+6e36f49 L2 did not reproduce on the second run
+d9124a4 L2 fails: receive dies for ten minutes while a round executes
+cdc2fa2 Record the first L2 run
+f2236e8 Add the L2 lock probe
+7ea1307 Record the Wavelength v0.1.0 evaluation
+70ff8a1 Add activity detail sheet
+```
 
-Modified:
-- `src/components/ActivityRow.tsx` — optional `onPress`, pressed state, accessibility label
-- `src/screens/activity/ActivityScreen.tsx` and `src/screens/home/HomeScreen.tsx` — both open the detail sheet, tracking the open entry by id so a pending entry updates in place
-- `src/lib/format.ts` — added `formatTimestampFull`
-- `README.md` — links to both new docs
-
-`bun run check` passes: typecheck, architecture lock, and all 17 expo-doctor checks.
-
-## What was built
-
-An activity detail sheet. The list row shows 8 of roughly 26 Entry fields and truncates three of them, which meant the real reason a payment failed was only readable through the accessibility tree. The sheet shows everything: full failure reason with a plain-English hint mapped from `failureCode`, the complete invoice or address, payment hash, preimage, txid, VTXO outpoint, and created against last update.
-
-One trap worth remembering: wrapping the sheet in a `Pressable` to absorb backdrop taps made it claim the touch responder, so the `ScrollView` rendered everything but refused to scroll. The backdrop is now an absolutely positioned sibling.
+`fed4910` is the original build. `bun run check` passes: typecheck, architecture lock, all 17 expo-doctor checks.
 
 ## The source clone is gone
 
-Most findings came from reading the Wavelength Go source, which is public and MIT licensed. It was cloned to a session scratchpad that does not persist. Re-clone it:
+Most findings came from reading the Wavelength Go source. It was cloned to a scratchpad that does not persist. Re-clone it:
 
 ```sh
 git clone --depth 1 --branch v0.1.0 https://github.com/lightninglabs/wavelength.git
 ```
 
-Tag `v0.1.0` is commit `6ff371852ff93044ffeab201fbb61a87520ef67e`. Every file and line reference in the two docs points at that commit.
+Tag `v0.1.0` is commit `6ff371852ff93044ffeab201fbb61a87520ef67e`. Every file and line reference in the docs points at that commit.
 
-## Where things stand
+## The next step
 
-Answered, from source:
+Run the long probe on Alice with the control running on Bob, repeatedly, until the block reproduces. Then read Bob's `__l2probe` immediately.
 
-- the phantom-balance half of the bark failure is addressed while the wallet is running. There is a per-VTXO expiry state machine, thresholds that scale with tree depth and CSV delay, escalation to unilateral exit at critical, and a spendable balance traced end to end as Live-VTXO only. The caveat: expiry is evaluated on block epochs, so a wallet reopened after a long closure can briefly report value it no longer holds. L1 must measure that window
-- the lease itself appears unchanged, on the inference that a closed app processes no block epochs. Not tested. Do not state it as fact
-- a mitigation is buildable today: `WalletVTXO` exposes `batchExpiry` and `relativeExpiry`, and `Info` carries `blockHeight`, so blocks-remaining is computable per VTXO. A visible deadline is possible even though the lease is not removable
+That single comparison is the whole point. Alice blocks and Bob does not means the wait is client-side, inside the wallet — Lightning Labs' bug. Both block together means it is the operator — a different report to a different place. Nothing else we can measure separates those two.
 
-Open, and blocking:
+Practical notes for the run:
 
-- test L2, the maintenance lock. Kesh's second killer. Wavelength bounds several waits but nobody has traced whether a round join can block invoice creation. This is the cheapest decisive test left and should be next
-- the SDK exposes only one of eleven operator policy values (`freeRefreshWindowBlocks`). Without the VTXO floor a client cannot compute the true maximum sendable, so it cannot reject an impossible amount before the confirmation screen. This is the highest-value upstream ask
-- LNURL is in the Kesh requirement and has not been shown to work at all
-- `progress.preimage` was empty on a completed Lightning send, so proof of payment is not yet demonstrated
+- Alice has about two runs of VTXO left. When she runs dry, reboard from her 2,972 on-chain backing, or swap roles and probe from Bob.
+- The `trace` debugLevel route is the fallback if the control stays ambiguous. It needs a runtime restart and the wallet password. Ask the user first.
 
-## Suggested next session
+## Also open, lower priority
 
-1. Run L2. Start a round join on Alice, then immediately create invoices on both wallets. Anything over 30 seconds reproduces the bark failure
-2. Run L1 if there is time to leave a wallet closed past the batch expiry window. Read the window from a VTXO's `batchExpiry` first
-3. Work through the receive matrix R4 to R7, which covers the offline cases that decide whether onramp is reliable
-4. Commit the current work before adding more
+- L1, the phantom balance through a real closure. Read a VTXO's `batchExpiry` minus `Info.blockHeight` first to size the window.
+- LNURL. The SDK's `classifyDestination` returns only `empty`, `invoice`, `address` — no LNURL awareness. An LNURL string falls through as `address` to the daemon. S5 is one send attempt to see if the daemon accepts it.
+- The operator-terms upstream ask. `ServerInfo` exposes 1 of 11 operator policy values, so a client cannot compute the true maximum sendable. Folded into the upstream draft as a secondary item.
+- `progress.preimage` was empty on a completed Lightning send, so proof of payment is not yet demonstrated.
 
 ## Loose ends
 
-- an Argent update to 0.17.0 is available. The user has not asked for it and it must not be applied without explicit consent
-- one unexplained observation: an on-chain send sat at `request created` from 12:26 without broadcasting, while a second send from the same wallet reached `settling`. Never diagnosed
-- `AlreadyExists: receive intent already used` originates in the swap server, which is not in the public repo. Our reading of the invoice burn matches observed behaviour but is unverified
+- An on-chain send sat at `request created` from 12:26 on 24 July without broadcasting, while a second send from the same wallet reached `settling`. Never diagnosed.
+- `AlreadyExists: receive intent already used` originates in the swap server, not in the public repo. Our reading of the invoice burn matches observed behaviour but is unverified.
+- The Argent update to 0.17.0 was applied on 24 July. No update is pending.
