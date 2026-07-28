@@ -93,11 +93,15 @@ So the trigger is not round execution, not round duration, and not anything else
 
 Note what this does to the first, 90 second run of L2. That run stopped at +90s and read as a clean pass. Runs 2 to 5 also pass cleanly, so a short window is not inherently wrong. The reason to distrust it is simpler than "it stopped too early": with a 1-in-5 failure rate, no single run of any length proves anything.
 
-One difference from bark worth keeping straight. bark held a local lock. This error says `response waiter expired`, a wait on a response that never came, in the OOR receive-script registration the receive path needs. Whether that wait is in the client, the daemon or the swap server is not established, and the swap server is not in the public repository.
+One difference from bark worth keeping straight. bark held a local lock. This error says `response waiter expired`, a wait on a response that never came, in the OOR receive-script registration the receive path needs.
+
+Where that wait lives was settled on 28 July 2026 by reading the source, and it changes the picture. It is waved's own mailbox response registry, running on the phone, waiting for a response envelope from the operator that never arrived. The ten minutes is `DefaultResponseWaiterTTL` (`mailbox/conn/response_registry.go:16`), a constant nothing overrides. Lightning Labs diagnosed the same root cause on the credit path in wavelength#1041 and fixed it in PR 1044, which is not in v0.1.0. The full chain, the upstream correlation and a way to reproduce the block on demand are in [RECEIVE_BLOCK_ROOT_CAUSE.md](RECEIVE_BLOCK_ROOT_CAUSE.md). Read that before doing any more L2 work.
 
 What this means for Kesh. A one-in-five chance is the wrong way to read it, because we do not know the denominator: five runs is five, and the trigger is unidentified. But the shape of the failure is already disqualifying on its own terms. A user waiting to be paid gets a screen that hangs for ten minutes and then shows an internal error, with no warning beforehand and no way to predict it. Whether that fires on 1 receive in 3 or 1 in 300, it needs a bound and a typed error before this carries user money.
 
-The next step is not another blind run. It is to reproduce the block with an instrument that can say what was blocked. Two discriminators are now in place, and they answer different questions. Within the wallet, the probe keeps issuing invoices while one is stalled: if the overlapping calls are still served, one response was lost, and if they all stall, receive was held wallet-wide, which is the bark shape. Between wallets, the control says whether a wallet-wide stall is the wallet's own or the operator's. Run 1 could answer neither, because the serial sampler attempted nothing during the ten minutes it was stuck.
+The next step is no longer a blind run at all. The root cause reading gives a way to force the failure: blackhole the operator connection after a receive call's send has landed, which strands the response exactly as a silently dead connection does. That costs no VTXO and takes minutes rather than half an hour. See the reproduction section of [RECEIVE_BLOCK_ROOT_CAUSE.md](RECEIVE_BLOCK_ROOT_CAUSE.md).
+
+Whether forced or waited for, the block still needs an instrument that can say what was blocked. Two discriminators are in place, and they answer different questions. Within the wallet, the probe keeps issuing invoices while one is stalled: if the overlapping calls are still served, one response was lost, and if they all stall, receive was held wallet-wide, which is the bark shape. Between wallets, the control says whether a wallet-wide stall is the wallet's own or the operator's. Run 1 could answer neither, because the serial sampler attempted nothing during the ten minutes it was stuck.
 
 Two further notes from the earlier short run. The exit produced no activity entry at all, consistent with wavelength#875 and the note under events and polling in the constraints document: the balance moved with nothing in the history to explain it. And the codebase does bound several waits (`replayRoundRegisterTimeout`, the prepared-send TTL, poll caps), which is consistent with what was measured but was not itself the thing tested.
 
@@ -255,6 +259,7 @@ Verified in source, safe to build on:
 - the SDK's `ServerInfo` exposing only `freeRefreshWindowBlocks`
 - that no client RPC triggers a round, that `useWalletRefresh` is only a data re-fetch, and that a cooperative exit queues into the next round (`client.d.ts`, `hooks.d.ts:157`, `exit.d.ts:5`)
 - the 5 minute send-intent TTL and the deliberate burn on dispatch failure
+- where the L2 receive block waits, and why it waits ten minutes. `DefaultResponseWaiterTTL` is 10 minutes (`mailbox/conn/response_registry.go:16`), nothing overrides it, the whole error chain is public and ends inside waved, and pruning is lazy so the caller wakes after the TTL rather than at it. Full citations in [RECEIVE_BLOCK_ROOT_CAUSE.md](RECEIVE_BLOCK_ROOT_CAUSE.md). What remains unverified is why the response was lost, not where the wait happened
 
 Observed once on signet, not generalisable:
 
@@ -271,8 +276,8 @@ Inference or inherited, must not be quoted as fact:
 - that the operator reclaims the on-chain backing at batch expiry. Inherited from Kesh's bark findings and general Ark semantics. The Wavelength source shows the client marking the VTXO failed, not what the operator does
 - that change re-minting moves the balance. Consistent with the coin-selection model and with the failure we saw, not separately traced
 - the reading that a failed send burns the payee's receive intent. The error comes from the swap server, which is not in the public repository
-- where the ten-minute receive block in L2 actually lives. The error is `response waiter expired` on an OOR receive-script registration, which is a wait on a response rather than the local mutex bark held. The client, the daemon and the swap server are all candidates, and the swap server is not in the public repository. What is observed is one call blocking while a round was outstanding; the mechanism is not
-- that the block has anything to do with the round beyond happening during one. The apparent coincidence of the block clearing as the round settled was the serial sampler, not the system. Two of three runs executed rounds with receive untouched
+- that the block has anything to do with the round beyond happening during one. The apparent coincidence of the block clearing as the round settled was the serial sampler, not the system. Four of five runs executed rounds with receive untouched, and the root cause reading makes the round look like a coincidence rather than a factor
+- whether run 1 was a dead connection or a single lost response. Both mechanisms produce `response waiter expired`; they differ in whether receive stalled wallet-wide, which run 1's serial sampler could not measure
 
 Known gaps in the matrix itself: of 22 tests, seven have results and one of those is partial. The other 15 have never been run, and every lifecycle test bar L2 is among them.
 
@@ -281,7 +286,7 @@ Known gaps in the matrix itself: of 22 tests, seven have results and one of thos
 What would need to be true for this to carry real user money.
 
 - an answer to L1 that does not depend on the user opening the app. Background refresh, a delegated server-side agent, or an explicit product limit on how long value may sit in Ark
-- L2 resolved one way or the other. Receive blocked for ten minutes and failed on one run of two. If that recurs it is disqualifying and needs an upstream fix, because rounds are automatic and no client can work around them. If it was operator degradation, the ask is smaller but real: bound the wait and return a typed, retryable error instead of `code = Internal`
+- L2 resolved one way or the other. Receive blocked for ten minutes and failed on one run of five. Two things now need to be true: a build carrying the keepalive fix, since v0.1.0 does not, and a bound on the response waiter that is shorter than ten minutes or a typed error when it gives up. We can supply the second ourselves with a context deadline on the receive call; the first needs a release or a build from main
 - a spendable-amount model enforced at entry, so users never reach a confirmation screen for a payment that cannot succeed
 - a balance presentation that survives fees and refreshes moving the number on its own
 - LNURL confirmed as supported, since it is in the Kesh requirement and is not yet demonstrated here
@@ -290,6 +295,8 @@ The honest summary today. Of the two failures that shelved Ark, Wavelength answe
 
 The phantom balance looks designed out. There is a real per-VTXO expiry state machine, the spendable figure is Live-only end to end, and the code is markedly more careful than bark on exactly that axis.
 
-The maintenance block is open, and it is the most urgent thing here. On one run of three, Alice could not receive for ten minutes and the attempt failed with an internal error — the same user-visible failure that shelved Ark. The other two runs were clean, including one whose round ran longer than the blocked one. Rounds do not cause it and slow rounds do not cause it; we do not know what does.
+The maintenance block is open, but it is no longer unexplained. On one run of five, Alice could not receive for ten minutes and the attempt failed with an internal error — the same user-visible failure that shelved Ark. The other four were clean, including two whose rounds ran longer than the blocked one.
+
+What changed on 28 July is that we know where the wait happens and why it lasts ten minutes, and that Lightning Labs found the same root cause on a different RPC and fixed it after v0.1.0 was cut. That moves the question from "what causes this" to two narrower ones: whether the released build we are testing is simply missing a known fix, and whether a ten-minute wait on a lost response is acceptable even once that fix lands. Neither rounds nor slow rounds cause it, and the round now looks like a coincidence rather than a factor.
 
 The lease itself is unchanged, and it still decides whether a consumer wallet can hold value in Ark at all. But L2 now outranks it in sequence, not because it is settled but because it is cheap to settle and a wallet that cannot reliably receive is not shippable regardless of how the expiry question resolves.

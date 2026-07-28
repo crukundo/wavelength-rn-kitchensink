@@ -14,15 +14,16 @@ This repo is the harness for deciding whether Lightning Labs' Wavelength answers
 ## Headline: where the two questions stand
 
 - L1, the phantom balance, is answered by design while the wallet runs. A per-VTXO expiry state machine, spendable traced as Live-only. Not yet tested through a real closure. See the confidence register.
-- L2, the maintenance block, is the live thread and is not settled. On one run of five, receive blocked for ten minutes and failed with an internal error — the same user-visible failure that shelved Ark. The other four were clean. Round execution and round duration are both ruled out, and no replacement hypothesis has been tested, so the trigger is unknown.
+- L2, the maintenance block, has a root cause as of 28 July 2026. The ten-minute block is `DefaultResponseWaiterTTL`, a constant in waved's mailbox response registry. The wait happens on the phone, in our own daemon, on a response from the operator that never arrived. Lightning Labs diagnosed the same root cause on a different RPC in wavelength#1041 and fixed it in PR 1044 — which is not in v0.1.0, the build we run.
 
-If you read nothing else, read the L2 section of [PAYMENT_TEST_FRAMEWORK.md](PAYMENT_TEST_FRAMEWORK.md) and the "next step" at the end of this handoff.
+If you read nothing else, read [RECEIVE_BLOCK_ROOT_CAUSE.md](RECEIVE_BLOCK_ROOT_CAUSE.md) and the "next step" at the end of this handoff.
 
 ## Read these first
 
+- [RECEIVE_BLOCK_ROOT_CAUSE.md](RECEIVE_BLOCK_ROOT_CAUSE.md) — where the L2 block waits, why it lasts ten minutes, the upstream issue and fix, and how to reproduce it on demand
 - [PAYMENT_TEST_FRAMEWORK.md](PAYMENT_TEST_FRAMEWORK.md) — the two decisive questions, the balance model, the 22-test matrix, and all five L2 runs
 - [WAVELENGTH_CONSTRAINTS.md](WAVELENGTH_CONSTRAINTS.md) — every limit verified against source, with provenance markers
-- [UPSTREAM_RECEIVE_BLOCKED.md](UPSTREAM_RECEIVE_BLOCKED.md) — the draft GitHub issue for the L2 block, ready to file
+- [UPSTREAM_RECEIVE_BLOCKED.md](UPSTREAM_RECEIVE_BLOCKED.md) — the upstream report, rewritten on 28 July as a comment on wavelength#1041. Not filed. The user files it, not the agent
 
 Do not trust any constraint not marked Source. The confidence register in the test framework is the authoritative list of what is verified, seen once, or inferred. Read it before quoting any finding.
 
@@ -77,6 +78,8 @@ Ruled out as the trigger:
 - round execution — runs 2 to 5 all executed rounds with receive untouched
 - round duration — runs 3 and 4 both ran longer rounds than run 1 could have had, and both stayed clean. Run 4's was 1,655 seconds. Measured rounds now span 94 to 1,655 seconds with no pattern
 
+The source reading of 28 July supersedes the search for a trigger among round properties. The round now looks like a coincidence: what the failure needs is a request that reaches the operator and a response that cannot get back. See [RECEIVE_BLOCK_ROOT_CAUSE.md](RECEIVE_BLOCK_ROOT_CAUSE.md).
+
 Runs 3, 4 and 5 carried a control on Bob. Run 3: 99 overlapping calls, worst 1,803 ms. Run 4: 180 in-round calls, median 1,635 ms against Alice's 1,661 ms. Run 5: 79 in-round calls, median 1,654 ms against Alice's 1,630 ms. None localised anything, because none of those runs blocked. The control stays in place.
 
 Runs 4 and 5 are the first of the concurrent sampler, and nothing stalled in either, so the overlap discrimination has still never fired. Peak in flight was 1 on both wallets, since calls take about 1.6 seconds against a 10-second interval. The instrument works; it has yet to meet a block.
@@ -110,8 +113,10 @@ The Metro logicalDeviceId is what `debugger-connect` needs — the UDID is rejec
 
 Balances after run 5 on 28 July 2026, signet. They move on their own from refresh fees, so read them from the app, do not trust these:
 
-- Alice: 2,238 spendable in a single live VTXO, 500 credit, 4,704 on-chain backing. The 744 left in run 4 and the 1,500 in run 5, so she has one probe run left. After that, reboard from the on-chain backing or swap roles and probe from Bob.
+- Alice: 2,238 spendable in a single live VTXO, 500 credit. On 28 July the user sent her 30,000 on-chain; it confirmed, the boarding intent reached `adopted`, and it was still in the round 28 minutes later — longer than any round we have measured. Check whether it landed before planning a run.
 - Bob: 26,990 spendable, 500 credit. Unspent — he has only ever run controls.
+
+Boarding takes the operator's required confirmations plus one full round. Detection is not the wait: the wallet checks the tip every second (`wallet/wallet.go:54`) and `eagerRoundJoin` makes a confirmed deposit join the next round with no user action. The round is the wait, and rounds run 94 to 1,655 seconds. `MinConfirmations` is not exposed by the SDK, so the app cannot show how many confirmations remain.
 
 Both wallets are password wallets. Separate simulators give separate app containers, so each wallet has its own dataDir, seed and node identity.
 
@@ -131,6 +136,7 @@ Everything is committed. Branch `main`, nothing pushed. Remote is `crukundo/wave
 Commits this session, newest first:
 
 ```
+97d5de1 Audit every citation against a fresh clone; fix four
 685b572 Run 5 is clean; measured rounds now span 94 to 1,655 seconds
 d827fac Read the give-up time from the config, not the copy
 760a6fd Give long runs 45 minutes, not 30
@@ -163,17 +169,21 @@ Tag `v0.1.0` resolves to commit `ff510b1130640bc43746259d6a742cd4bad6abf3`. The 
 
 ## The next step
 
-File the upstream issue, then keep probing. Those are not alternatives, and the order matters: [UPSTREAM_RECEIVE_BLOCKED.md](UPSTREAM_RECEIVE_BLOCKED.md) is ready to post, and its second question — which component holds the wait — is one only Lightning Labs can answer. Five runs have produced one block and four nulls, so another run is more likely to produce a fifth null than a reproduction. A reply takes days; probing costs nothing while you wait.
+Force the failure instead of waiting for it. That is the change of 28 July: the root cause reading says the block needs a request that reaches the operator and a response that cannot return, so a blackhole on the operator connection reproduces it deliberately. It costs no VTXO and takes minutes.
 
-Then run the long probe on Alice with the control running on Bob, repeatedly, until the block reproduces. Read both `__l2probe` objects immediately.
+The procedure and the predicted outcomes are in the reproduction section of [RECEIVE_BLOCK_ROOT_CAUSE.md](RECEIVE_BLOCK_ROOT_CAUSE.md). In short: start the probe on Alice in fast mode with no exit, run `sudo scripts/operator-blackhole.sh window 0 60`, then read `__l2probe`.
 
-Two questions get answered, in this order. First, from Alice alone: did the calls that started during the stall still get served? If they did, one response was lost. If they all stalled, receive was held wallet-wide, which is the bark failure. Second, from Bob: if Alice stalled wallet-wide, did Bob stall at the same moment? Alice alone means the wait is inside that wallet — Lightning Labs' bug. Both together means it is the operator — a different report to a different place.
+The headline result to look for is a call that hangs the full ten minutes even though the network came back after one. If that happens, one minute of network trouble produces a ten-minute user-visible hang, which is the product argument in a single line. If instead the call recovers when the network returns, the response was durable and redelivered, and run 1's was lost for some other reason — which is a genuinely new finding.
 
-The first question is new, and it is the one run 1 could not answer. The probe now reports its own answer on screen, so a reproduction is readable without exporting anything.
+Two cautions. The blackhole is host-wide, so Bob is not a valid control while it is on. And it changes the host firewall: check `status` and run `off` afterwards.
 
-Practical notes for the run:
+Filing upstream is the user's job, not the agent's. The report is rewritten and ready in [UPSTREAM_RECEIVE_BLOCKED.md](UPSTREAM_RECEIVE_BLOCKED.md), aimed at wavelength#1041 rather than at a new issue.
 
-- Alice has one VTXO left, the 2,238. When she runs dry, reboard from her on-chain backing, or swap roles and probe from Bob.
+The unforced run still has a place, because the forced one proves the mechanism rather than the incident. If you run it, the questions are unchanged. First, from Alice alone: did the calls that started during the stall still get served? If they did, one response was lost. If they all stalled, receive was held wallet-wide, which is the bark shape. Second, from Bob: if Alice stalled wallet-wide, did Bob stall at the same moment?
+
+Practical notes for a run:
+
+- Alice's 30,000 boarded on 28 July, so VTXO supply is no longer the constraint it was.
 - Budget the wall clock honestly. Run 4's round took 27.6 minutes against what was then a 30-minute cap. The cap is now 45 minutes, but a round can still outrun it.
 - Scroll the start control into view before tapping it. The accessibility tree reports frames for content below the viewport, and a tap at that coordinate lands on the tab bar instead — which navigates away, remounting the screen. Harmless before a run, fatal during one.
 - The `trace` debugLevel route is the fallback if the control stays ambiguous. It needs a runtime restart and the wallet password. Ask the user first.
