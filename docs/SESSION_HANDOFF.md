@@ -23,7 +23,7 @@ If you read nothing else, read [RECEIVE_BLOCK_ROOT_CAUSE.md](RECEIVE_BLOCK_ROOT_
 - [RECEIVE_BLOCK_ROOT_CAUSE.md](RECEIVE_BLOCK_ROOT_CAUSE.md) — where the L2 block waits, why it lasts ten minutes, the upstream issue and fix, and how to reproduce it on demand
 - [PAYMENT_TEST_FRAMEWORK.md](PAYMENT_TEST_FRAMEWORK.md) — the two decisive questions, the balance model, the 22-test matrix, and all five L2 runs
 - [WAVELENGTH_CONSTRAINTS.md](WAVELENGTH_CONSTRAINTS.md) — every limit verified against source, with provenance markers
-- [UPSTREAM_RECEIVE_BLOCKED.md](UPSTREAM_RECEIVE_BLOCKED.md) — the upstream report, rewritten on 28 July as a comment on wavelength#1041. Not filed. The user files it, not the agent
+- [UPSTREAM_RECEIVE_BLOCKED.md](UPSTREAM_RECEIVE_BLOCKED.md) — the upstream report, rewritten on 28 July as a comment on wavelength#1041. Shelved, not filed. Do not post it; the user decides when and files it
 
 Do not trust any constraint not marked Source. The confidence register in the test framework is the authoritative list of what is verified, seen once, or inferred. Read it before quoting any finding.
 
@@ -177,7 +177,7 @@ The headline result to look for is a call that hangs the full ten minutes even t
 
 Two cautions. The blackhole is host-wide, so Bob is not a valid control while it is on. And it changes the host firewall: check `status` and run `off` afterwards.
 
-Filing upstream is the user's job, not the agent's. The report is rewritten and ready in [UPSTREAM_RECEIVE_BLOCKED.md](UPSTREAM_RECEIVE_BLOCKED.md), aimed at wavelength#1041 rather than at a new issue.
+Filing upstream is shelved by the user's decision on 28 July 2026. The report is finished in [UPSTREAM_RECEIVE_BLOCKED.md](UPSTREAM_RECEIVE_BLOCKED.md), aimed at wavelength#1041 rather than at a new issue. Do not post it.
 
 The unforced run still has a place, because the forced one proves the mechanism rather than the incident. If you run it, the questions are unchanged. First, from Alice alone: did the calls that started during the stall still get served? If they did, one response was lost. If they all stalled, receive was held wallet-wide, which is the bark shape. Second, from Bob: if Alice stalled wallet-wide, did Bob stall at the same moment?
 

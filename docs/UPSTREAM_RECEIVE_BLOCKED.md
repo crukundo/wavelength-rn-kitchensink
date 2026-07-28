@@ -1,5 +1,7 @@
 # Upstream report: receive blocked for ten minutes
 
+Shelved on 28 July 2026, by the user's decision. The text below is finished and reviewed, but it is not going upstream yet and no agent should file it. Revisit once the forced reproduction has run, which may add or remove an ask.
+
 Rewritten on 28 July 2026. The previous draft asked which component held the wait and said we could not tell from the public source. We can, and it is answered in [RECEIVE_BLOCK_ROOT_CAUSE.md](RECEIVE_BLOCK_ROOT_CAUSE.md): waved's own mailbox response registry, on the phone, waiting out `DefaultResponseWaiterTTL`.
 
 That makes this the same root cause as [wavelength#1041](https://github.com/lightninglabs/wavelength/issues/1041), reached through a different RPC. Filing the old draft as a new issue would have been a duplicate with two wrong claims in it.
@@ -28,7 +30,7 @@ We hit what looks like the same root cause as this issue, on a different RPC pat
 
 One `receive` call blocked for 602,812 ms and then failed:
 
-```
+```text
 create receive invoice: rpc error: code = Internal desc = start receive:
 rpc error: code = Internal desc = start receive swap: allocate claim
 receive script: create receive script: rpc error: code = Internal desc =
@@ -49,7 +51,9 @@ The failing hop is `RegisterReceiveScriptTaproot` (`waved/receive_script.go:477`
 - React Native 0.81.5, React 19.1.0, Expo 54.0.25, New Architecture
 - iOS 18.6 simulator, macOS 26.5.2
 - signet, `signet.wavelength.lightning.finance`
-- 24 July 2026, about 17:05 UTC+3
+- 24 July 2026. The blocked call started at about 14:05:21 UTC and failed at about 14:15:45 UTC
+
+Those two stamps are the gap in our `swaps.db` rows: 22 successful receives ended at 14:05:21 UTC, nothing was written for ten minutes, and the next row is at 14:15:45 UTC. The blocked call wrote no row at all.
 
 The daemon had been running for some hours on one connection, which is consistent with the stale-connection story in #1044.
 
@@ -66,7 +70,3 @@ We can bound our own calls with a context deadline, and we will. But `code = Int
 ## One incidental detail
 
 Every successful `receive` writes a `receive_swaps` row in `swaps.db` stamped `created_at_unix`, and ours line up with our probe timings exactly. The blocked call wrote no row at all, so it failed before any swap state was persisted.
-
-## Separately, a client-visibility gap
-
-`OperatorTerms` carries eleven policy values, but the SDK's `ServerInfo` surfaces only `freeRefreshWindowBlocks` (`generated.d.ts:273`). Without the VTXO floor a client cannot compute the true maximum sendable, so it cannot reject an impossible amount before the confirmation screen. Happy to file that separately if it is useful.
