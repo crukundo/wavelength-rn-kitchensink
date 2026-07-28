@@ -1,0 +1,567 @@
+<title>Wavelength v0.1.0 — embedding field guide</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+@font-face{font-family:'Plex';font-style:normal;font-weight:400;font-display:swap;src:url(data:font/woff2;base64,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) format('woff2');}
+@font-face{font-family:'Plex';font-style:normal;font-weight:500;font-display:swap;src:url(data:font/woff2;base64,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) format('woff2');}
+@font-face{font-family:'Plex';font-style:normal;font-weight:600;font-display:swap;src:url(data:font/woff2;base64,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) format('woff2');}
+:root{
+  --paper:#F4F3F7; --panel:#FBFAFD; --panel-2:#EEEDF3; --ink:#17161D; --ink-2:#413E4C; --mid:#6A6678; --faint:#9995A6; --line:#DEDCE6; --line-2:#CFCCDA;
+  --accent:#5A47E0; --accent-soft:#EEEAFD;
+  --src:#0E8F7E; --src-bg:#E1F3EF; --obs:#B06E12; --obs-bg:#F6EBD8; --unv:#C13E5A; --unv-bg:#F7E4E8;
+  --shadow:0 1px 2px rgba(23,22,29,.05),0 8px 24px -12px rgba(23,22,29,.16);
+  --mono:'Plex',ui-monospace,"SF Mono","Cascadia Code",Menlo,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --measure:68ch;
+}
+@media (prefers-color-scheme:dark){:root{
+  --paper:#100F16; --panel:#191823; --panel-2:#201E2B; --ink:#ECEAF3; --ink-2:#C4C1D0; --mid:#928EA1; --faint:#6C687A; --line:#2A2836; --line-2:#3A3747;
+  --accent:#8A79F5; --accent-soft:#211C3A;
+  --src:#3DBFA8; --src-bg:#12291F; --obs:#DDA23F; --obs-bg:#2C2413; --unv:#E86A82; --unv-bg:#2E1720;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px -14px rgba(0,0,0,.6);
+}}
+:root[data-theme="light"]{
+  --paper:#F4F3F7; --panel:#FBFAFD; --panel-2:#EEEDF3; --ink:#17161D; --ink-2:#413E4C; --mid:#6A6678; --faint:#9995A6; --line:#DEDCE6; --line-2:#CFCCDA;
+  --accent:#5A47E0; --accent-soft:#EEEAFD;
+  --src:#0E8F7E; --src-bg:#E1F3EF; --obs:#B06E12; --obs-bg:#F6EBD8; --unv:#C13E5A; --unv-bg:#F7E4E8;
+  --shadow:0 1px 2px rgba(23,22,29,.05),0 8px 24px -12px rgba(23,22,29,.16);
+}
+:root[data-theme="dark"]{
+  --paper:#100F16; --panel:#191823; --panel-2:#201E2B; --ink:#ECEAF3; --ink-2:#C4C1D0; --mid:#928EA1; --faint:#6C687A; --line:#2A2836; --line-2:#3A3747;
+  --accent:#8A79F5; --accent-soft:#211C3A;
+  --src:#3DBFA8; --src-bg:#12291F; --obs:#DDA23F; --obs-bg:#2C2413; --unv:#E86A82; --unv-bg:#2E1720;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px -14px rgba(0,0,0,.6);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:17px;line-height:1.62;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+h1,h2,h3,h4{font-family:var(--mono);font-weight:600;line-height:1.15;text-wrap:balance;margin:0}
+p{margin:0 0 1em}
+a{color:var(--accent);text-underline-offset:2px}
+code,.k{font-family:var(--mono);font-size:.86em;background:var(--panel-2);padding:.08em .38em;border-radius:4px;border:1px solid var(--line);word-break:break-word}
+.eyebrow{font-family:var(--mono);font-size:12px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--mid)}
+.tnum{font-variant-numeric:tabular-nums}
+::selection{background:var(--accent-soft)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px}
+
+/* masthead */
+.mast{position:relative;border-bottom:1px solid var(--line);overflow:hidden}
+.mast-inner{padding:64px 0 40px}
+.trace{position:absolute;inset:0;width:100%;height:100%;opacity:.5;pointer-events:none}
+.mast h1{font-size:clamp(2.1rem,5.4vw,3.5rem);letter-spacing:-.01em;position:relative}
+.mast h1 .v{color:var(--accent)}
+.lede{position:relative;font-size:clamp(1.05rem,2.2vw,1.28rem);color:var(--ink-2);max-width:34ch;margin-top:.7em;line-height:1.4}
+.meta{position:relative;display:flex;flex-wrap:wrap;gap:8px 22px;margin-top:26px;font-family:var(--mono);font-size:12.5px;color:var(--mid)}
+.meta b{color:var(--ink);font-weight:500}
+
+/* provenance legend */
+.legend{position:relative;display:flex;flex-wrap:wrap;gap:10px;margin-top:24px}
+.chip{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11.5px;font-weight:500;letter-spacing:.03em;padding:5px 10px 5px 8px;border-radius:999px;border:1px solid var(--line-2);background:var(--panel);white-space:nowrap}
+.chip .dot{width:8px;height:8px;border-radius:50%;flex:none}
+.chip.src .dot{background:var(--src)} .chip.obs .dot{background:var(--obs)} .chip.unv .dot{background:var(--unv)}
+.chip .desc{color:var(--mid);font-weight:400;letter-spacing:0}
+
+/* sections */
+section{padding:56px 0;border-bottom:1px solid var(--line)}
+.sec-head{display:flex;align-items:baseline;gap:14px;margin-bottom:8px}
+.sec-num{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--accent)}
+.sec-head h2{font-size:clamp(1.5rem,3vw,2rem);letter-spacing:-.01em}
+.sec-intro{max-width:var(--measure);color:var(--ink-2);margin:14px 0 30px}
+.prose{max-width:var(--measure)}
+.prose p{color:var(--ink-2)}
+
+/* verdict */
+.verdict{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media (max-width:720px){.verdict{grid-template-columns:1fr}}
+.vcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.vcard::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px}
+.vcard.ok::before{background:var(--src)} .vcard.risk::before{background:var(--unv)}
+.vcard .q{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--mid)}
+.vcard h3{font-size:1.22rem;margin:8px 0 4px}
+.vstatus{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:12.5px;font-weight:600;margin:6px 0 12px;padding:3px 9px;border-radius:6px}
+.vcard.ok .vstatus{color:var(--src);background:var(--src-bg)} .vcard.risk .vstatus{color:var(--unv);background:var(--unv-bg)}
+.vcard p{font-size:.95rem;color:var(--ink-2);margin:0}
+
+/* fact card grid */
+.cards{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+@media (max-width:720px){.cards{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--line-2);border-radius:0 12px 12px 0;padding:20px 22px;box-shadow:var(--shadow)}
+.card.src{border-left-color:var(--src)} .card.obs{border-left-color:var(--obs)} .card.unv{border-left-color:var(--unv)}
+.card .tag{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;margin-bottom:9px}
+.card.src .tag{color:var(--src)} .card.obs .tag{color:var(--obs)} .card.unv .tag{color:var(--unv)}
+.card .tag .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+.card h4{font-size:1rem;margin-bottom:7px;letter-spacing:-.005em}
+.card p{font-size:.92rem;color:var(--ink-2);margin:0 0 .7em;line-height:1.55}
+.card p:last-child{margin-bottom:0}
+.card .cite{font-family:var(--mono);font-size:11px;color:var(--faint);word-break:break-all}
+.card .impl{margin-top:11px;padding-top:11px;border-top:1px dashed var(--line-2);font-size:.88rem}
+.card .impl b{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--mid);display:block;margin-bottom:3px;font-weight:600}
+.span2{grid-column:1/-1}
+
+/* stack diagram */
+.stack{display:flex;flex-direction:column;gap:2px;max-width:760px;margin:0 auto}
+.layer{display:grid;grid-template-columns:32px 1fr;gap:0;border:1px solid var(--line);background:var(--panel);border-radius:10px;overflow:hidden;box-shadow:var(--shadow)}
+.layer .idx{display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;font-weight:600;color:var(--panel);background:var(--accent)}
+.layer.rail .idx{background:var(--ink-2)}
+.layer .body{padding:13px 16px}
+.layer .lname{font-family:var(--mono);font-weight:600;font-size:.95rem}
+.layer .ldesc{font-size:.85rem;color:var(--mid);margin-top:2px}
+.layer .lcode{font-family:var(--mono);font-size:11px;color:var(--faint)}
+.hop{text-align:center;font-family:var(--mono);font-size:16px;color:var(--faint);line-height:1;padding:1px 0}
+.boundary{display:flex;align-items:center;gap:10px;margin:14px auto;max-width:760px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mid)}
+.boundary::before,.boundary::after{content:"";height:1px;background:var(--line-2);flex:1}
+
+/* expiry lifecycle */
+.life{display:grid;grid-template-columns:repeat(4,1fr);gap:0;max-width:840px;margin:8px auto 0}
+@media (max-width:720px){.life{grid-template-columns:1fr;gap:10px}}
+.phase{position:relative;padding:18px 16px;border:1px solid var(--line);background:var(--panel);text-align:center}
+.life .phase:first-child{border-radius:12px 0 0 12px}
+.life .phase:last-child{border-radius:0 12px 12px 0}
+@media (max-width:720px){.life .phase{border-radius:12px!important}}
+.phase .st{font-family:var(--mono);font-weight:600;font-size:.92rem}
+.phase .th{font-family:var(--mono);font-size:11px;color:var(--accent);margin:5px 0 8px;font-variant-numeric:tabular-nums}
+.phase .ac{font-size:.82rem;color:var(--mid);line-height:1.4}
+.phase[data-s="expired"]{background:var(--unv-bg)}
+.phase[data-s="expired"] .th{color:var(--unv)}
+.phase[data-s="safe"]{background:var(--src-bg)}
+.phase[data-s="safe"] .th{color:var(--src)}
+
+/* balance model */
+.bal{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:6px}
+@media (max-width:860px){.bal{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:520px){.bal{grid-template-columns:1fr}}
+.field{border:1px solid var(--line);border-radius:10px;padding:15px;background:var(--panel)}
+.field .fn{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ink);word-break:break-all}
+.field .fd{font-size:.82rem;color:var(--mid);margin-top:6px;line-height:1.4}
+.field.spend{border-color:var(--src);background:var(--src-bg)}
+.field.spend .fn{color:var(--src)}
+
+/* tables */
+.tblwrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;font-size:.9rem;min-width:520px}
+th,td{padding:11px 15px;text-align:left;border-bottom:1px solid var(--line)}
+thead th{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mid);font-weight:600;background:var(--panel)}
+tbody tr:last-child td{border-bottom:none}
+tbody tr.block td{background:var(--unv-bg)}
+td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right}
+.pill{display:inline-block;font-family:var(--mono);font-size:11px;font-weight:600;padding:2px 8px;border-radius:5px}
+.pill.ok{color:var(--src);background:var(--src-bg)} .pill.bad{color:var(--unv);background:var(--unv-bg)}
+
+/* error trace */
+.errtrace{max-width:760px;margin:0 auto;border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
+.errtrace .frame{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:11px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+.errtrace .frame:last-child{border-bottom:none;background:var(--unv-bg)}
+.errtrace .fmsg{font-family:var(--mono);font-size:12.5px;color:var(--ink)}
+.errtrace .frame:last-child .fmsg{color:var(--unv);font-weight:600}
+.errtrace .floc{font-family:var(--mono);font-size:11px;color:var(--faint);white-space:nowrap}
+
+/* backend recs */
+.recs{display:flex;flex-direction:column;gap:14px;max-width:var(--measure)}
+.rec{display:grid;grid-template-columns:36px 1fr;gap:16px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;box-shadow:var(--shadow)}
+.rec .rn{font-family:var(--mono);font-size:15px;font-weight:600;color:var(--accent);padding-top:1px}
+.rec h4{font-size:1.02rem;margin-bottom:6px}
+.rec p{font-size:.92rem;color:var(--ink-2);margin:0 0 .6em}
+.rec .basis{font-size:.83rem;color:var(--mid);margin:0}
+.rec .basis b{font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--mid);font-weight:600}
+
+/* callout */
+.callout{max-width:var(--measure);border:1px solid var(--line-2);border-radius:12px;padding:20px 24px;background:var(--panel-2)}
+.callout .eyebrow{margin-bottom:8px}
+.callout p{margin:0;color:var(--ink-2);font-size:.95rem}
+.callout p+p{margin-top:.7em}
+
+ul.clean{max-width:var(--measure);padding-left:0;list-style:none;margin:0}
+ul.clean li{position:relative;padding-left:24px;margin-bottom:12px;color:var(--ink-2);font-size:.95rem}
+ul.clean li::before{content:"";position:absolute;left:2px;top:.62em;width:7px;height:7px;border-radius:50%;background:var(--accent)}
+ul.clean li b{color:var(--ink);font-weight:600;font-family:var(--mono);font-size:.9em}
+
+footer{padding:44px 0 72px}
+.foot-grid{display:flex;flex-wrap:wrap;gap:8px 22px;font-family:var(--mono);font-size:12px;color:var(--mid)}
+.foot-note{max-width:var(--measure);color:var(--faint);font-size:.85rem;margin-top:20px}
+
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<header class="mast">
+  <canvas class="trace" id="trace" aria-hidden="true"></canvas>
+  <div class="wrap mast-inner">
+    <div class="eyebrow">Embedding field guide · internal</div>
+    <h1>Wavelength <span class="v">v0.1.0</span><br>on a mobile wallet</h1>
+    <p class="lede">How the Ark client works, what it costs to embed, and where a backend can carry the weight it cannot.</p>
+    <div class="meta">
+      <span>verified against <b>lightninglabs/wavelength</b></span>
+      <span>tag <b>v0.1.0</b> · commit <b>ff510b11</b></span>
+      <span>signet · <b>28 July 2026</b></span>
+    </div>
+    <div class="legend">
+      <span class="chip src"><span class="dot"></span>Source <span class="desc">read in the Go source, cited</span></span>
+      <span class="chip obs"><span class="dot"></span>Observed <span class="desc">reproduced here, once or twice</span></span>
+      <span class="chip unv"><span class="dot"></span>Unverified <span class="desc">inference or outside this repo</span></span>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<section id="verdict">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">00</span><h2>The two questions that decide it</h2></div>
+    <p class="sec-intro">Kesh shelved its last Ark attempt (bark) for two specific failures: an inactive wallet that silently lost money while still showing it as spendable, and a maintenance step that blocked receiving. Everything else is secondary to how Wavelength answers these two.</p>
+    <div class="verdict">
+      <div class="vcard ok">
+        <div class="q">L1 · phantom balance</div>
+        <h3>Does an idle wallet still lose money?</h3>
+        <span class="vstatus">Answered by design, while running</span>
+        <p>A real per-VTXO expiry state machine drives refresh and unilateral exit, and the spendable figure counts only live VTXOs. Not yet tested through a real closure — a reopened wallet can briefly show value it no longer holds until it processes a block.</p>
+      </div>
+      <div class="vcard risk">
+        <div class="q">L2 · receive block</div>
+        <h3>Can maintenance still starve receiving?</h3>
+        <span class="vstatus">Root cause known · fix not in v0.1.0</span>
+        <p>One receive in five runs hung for ten minutes and failed. The wait is a ten-minute constant inside the on-device daemon, waiting on a reply from the operator. Lightning Labs fixed the same cause after v0.1.0 was cut — the release we run does not carry it.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="model">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">01</span><h2>How value lives in Wavelength</h2></div>
+    <p class="sec-intro">Ark holds your money as virtual UTXOs — VTXOs — kept off-chain and backed by an on-chain output the operator controls. A VTXO is not a coin you hold outright. It is a lease with an expiry height, and keeping it alive is active work.</p>
+
+    <div class="prose">
+      <p>Every VTXO carries a batch expiry. As that height approaches, the client moves it through four states and acts on each. The thresholds are dynamic, derived from the VTXO's own tree depth and timelock so there is always time to exit to chain rather than lose the funds.</p>
+    </div>
+
+    <div class="life" role="list" aria-label="VTXO expiry lifecycle">
+      <div class="phase" data-s="safe" role="listitem"><div class="st">safe</div><div class="th">plenty of time</div><div class="ac">no action; balance counts it as spendable</div></div>
+      <div class="phase" role="listitem"><div class="st">needs_refresh</div><div class="th">≤ 144 blocks*</div><div class="ac">request a cooperative forfeit into a fresh round, resetting the lease</div></div>
+      <div class="phase" role="listitem"><div class="st">critical</div><div class="th">≤ max(36, depth×6 + CSV)</div><div class="ac">escalate to the chain resolver for unilateral exit rather than wait</div></div>
+      <div class="phase" data-s="expired" role="listitem"><div class="st">expired</div><div class="th">past batch height</div><div class="ac">marked failed, not recoverable; the operator reclaims the backing</div></div>
+    </div>
+    <p class="prose" style="margin-top:14px;font-size:.86rem;color:var(--faint);font-family:var(--mono)">* refresh threshold = max(144, critical + 72), and never traded away to chase the operator's free-refresh window. Source: vtxo/expiry.go:81–90, transitions.go:236.</p>
+
+    <div class="cards" style="margin-top:32px">
+      <div class="card src">
+        <div class="tag"><span class="dot"></span>Source</div>
+        <h4>The lease is real, and defended in code</h4>
+        <p>Four states, dynamic thresholds, and a documented rule to never trade safety for a fee waiver. An expired VTXO moves to a failed, non-recoverable state.</p>
+        <p class="cite">vtxo/expiry.go · vtxo/transitions.go:176,236</p>
+      </div>
+      <div class="card unv">
+        <div class="tag"><span class="dot"></span>Unverified</div>
+        <h4>A closed app defends nothing</h4>
+        <p>The daemon runs in-process, so a force-quit stops all refresh and escalation. That a closed wallet eventually loses funds is a strong inference, not source-proven, and no background execution was found in this harness.</p>
+        <p class="cite">inference from in-process daemon</p>
+      </div>
+      <div class="card obs">
+        <div class="tag"><span class="dot"></span>Observed</div>
+        <h4>Rounds are the operator's clock</h4>
+        <p>Value settles in batched operator rounds. Measured round times ranged from 94 to 1,655 seconds with no pattern — about 2 to 28 minutes. A wallet does not control when its round runs.</p>
+        <p class="cite">5 probe runs, signet, 24 &amp; 28 July 2026</p>
+      </div>
+      <div class="card src">
+        <div class="tag"><span class="dot"></span>Source</div>
+        <h4>A client cannot ask for a round</h4>
+        <p>There is no refresh RPC. Only two client actions do round work: a cooperative exit, and boarding a deposit. Automatic refresh near expiry cannot be triggered on demand.</p>
+        <p class="cite">client.d.ts · exit.d.ts:5</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="stack">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">02</span><h2>The stack on a native client</h2></div>
+    <p class="sec-intro">Wavelength is not a thin client talking to a server. The full daemon is a native library compiled into the app, so the phone runs its own Ark node. Your JavaScript calls a native binding, which drives that in-process daemon, which talks to three remote services.</p>
+
+    <div class="stack" aria-label="Runtime stack, top to bottom">
+      <div class="layer"><div class="idx">1</div><div class="body"><div class="lname">React / your screens</div><div class="ldesc">hooks call the SDK; a running-balance ledger cannot be built from activity</div><div class="lcode">@lightninglabs/wavelength-react · useWalletRefresh is only a re-fetch</div></div></div>
+      <div class="hop">↓</div>
+      <div class="layer"><div class="idx">2</div><div class="body"><div class="lname">wavelength-react-native</div><div class="ldesc">native binding; ships the daemon binaries per platform</div><div class="lcode">Wavewalletdk.aar · iOS xcframework · scripts/stage-wavelength-native.mjs</div></div></div>
+      <div class="hop">↓</div>
+      <div class="layer"><div class="idx">3</div><div class="body"><div class="lname">waved — the daemon, in your app process</div><div class="ldesc">holds the seed, the VTXO state machine, and the wallet lock; one instance at module scope</div><div class="lcode">SQLite: waved.db · swaps.db · vtxos.db</div></div></div>
+      <div class="boundary">device · network boundary</div>
+      <div class="layer rail"><div class="idx">4</div><div class="body"><div class="lname">Ark operator (lumosd) · via store-and-forward mailbox</div><div class="ldesc">rounds, indexer, receive-script registration; a lost reply here is what hangs a call</div><div class="lcode">signet.wavelength.lightning.finance → lumosd-signet</div></div></div>
+      <div class="hop">↓</div>
+      <div class="layer rail"><div class="idx">5</div><div class="body"><div class="lname">Swap server · Esplora</div><div class="ldesc">Lightning and credit swaps; chain data. Swap server is closed-source, outside the public repo</div><div class="lcode">swap.signet… · mempool-signet…</div></div></div>
+    </div>
+
+    <div class="prose" style="margin-top:32px">
+      <p>The mailbox transport matters for one reason. A unary call registers a response waiter, sends the request, then blocks on that waiter. If the reply never comes back, the call waits out a fixed ten-minute time-to-live — which is the whole of section 05.</p>
+    </div>
+  </div>
+</section>
+
+<section id="embed">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">03</span><h2>What you must know to embed it</h2></div>
+    <p class="sec-intro">These are the constraints that cost real payments to discover. Each carries its provenance and the design decision it forces. The recurring theme: almost nothing is a fixed constant, and the client hides most of what it depends on.</p>
+
+    <div class="cards">
+      <div class="card src span2">
+        <div class="tag"><span class="dot"></span>Source</div>
+        <h4>Almost every limit is operator policy, and the SDK hides it</h4>
+        <p>The operator negotiates 11 policy values — dust limit, VTXO floor, balance cap, fee rate, required confirmations and more. The SDK's <span class="k">ServerInfo</span> exposes exactly one: <span class="k">freeRefreshWindowBlocks</span>. A client cannot read the VTXO floor, so it cannot compute the true maximum sendable.</p>
+        <p class="cite">lib/types/boarding.go:34 · generated.d.ts:273</p>
+        <div class="impl"><b>Design implication</b>Never hardcode a threshold. Read the terms — or have a backend supply them (section 06) — and render limits from them. A number seen on signet is one operator's policy, not the protocol.</div>
+      </div>
+
+      <div class="card obs">
+        <div class="tag"><span class="dot"></span>Observed</div>
+        <h4>Spendable ≠ balance</h4>
+        <p>A wallet holding one 1,745 sat VTXO could not send 1,000: change of 745 fell below the operator's minimum change of 1,000. Selection rejects sub-minimum change unless change is exactly zero.</p>
+        <p class="cite">rpc_server.go:3104 · coinselect/selector.go:53</p>
+        <div class="impl"><b>Design implication</b>Compute the real maximum from the VTXO inventory and reject at amount entry. Exact-VTXO "send max" always works — offer it as the escape hatch.</div>
+      </div>
+
+      <div class="card obs">
+        <div class="tag"><span class="dot"></span>Observed</div>
+        <h4>The balance moves on its own</h4>
+        <p>Refresh fees, round-join fees, change re-minting and credit auto-redeem all change the spendable figure with no user action. A boarding deposit of 2,000 credited 1,745 after a 255 fee.</p>
+        <p class="cite">waved/rpc_fees.go:49 · credit/policy.go:17</p>
+        <div class="impl"><b>Design implication</b>Never present a balance delta as the user's payment. "You sent 1,000" and "your balance fell by 1,255" are both true and must be shown as separate, named facts.</div>
+      </div>
+
+      <div class="card obs">
+        <div class="tag"><span class="dot"></span>Observed</div>
+        <h4>The rail is an output of the quote</h4>
+        <p>A destination does not fix how a payment travels. A 500 sat BOLT11 send quoted on the credit rail on a wallet holding only Ark VTXOs. Rails: in-ark, lightning, onchain, credit, mixed.</p>
+        <p class="cite">destination.d.ts:5 · generated.d.ts:385</p>
+        <div class="impl"><b>Design implication</b>No screen before the quote may promise a rail or a fee. Show them only once the quote returns.</div>
+      </div>
+
+      <div class="card obs">
+        <div class="tag"><span class="dot"></span>Observed</div>
+        <h4>Small VTXOs are near-unexitable</h4>
+        <p>A 1,000 sat VTXO exited cooperatively arrived on-chain as 743 — a quarter lost to fees. A below-floor 744 sat VTXO could still be exited, since the minimum limits what a send may produce, not what an exit may forfeit.</p>
+        <p class="cite">observed 24 &amp; 28 July 2026</p>
+        <div class="impl"><b>Design implication</b>Tell the user the per-VTXO exit cost before they board into a shape made of many small pieces.</div>
+      </div>
+
+      <div class="card src">
+        <div class="tag"><span class="dot"></span>Source</div>
+        <h4>Deposits auto-join the next round</h4>
+        <p>A confirmed boarding deposit joins the next round with no user action — the wallet checks the tip every second and joins eagerly. Total time is the operator's required confirmations plus one full round.</p>
+        <p class="cite">wallet/wallet.go:54,208 · round/actor.go:1343</p>
+        <div class="impl"><b>Design implication</b>"Pending" after a deposit is expected and can last many minutes. Confirmations required is operator policy and is not exposed to the client.</div>
+      </div>
+
+      <div class="card src">
+        <div class="tag"><span class="dot"></span>Source</div>
+        <h4>Send intents are single-use, by design</h4>
+        <p>A prepared send expires in 5 minutes and any dispatch failure burns it — the caller must prepare again. A failed Lightning send surfaced <span class="k">AlreadyExists: receive intent already used</span>, which appears to kill the payee's invoice too.</p>
+        <p class="cite">swapwallet/send_intents.go:15,92</p>
+        <div class="impl"><b>Design implication</b>After a failed send, never offer a retry that reuses the quote or the invoice. Prepare again; the payee likely needs a fresh invoice.</div>
+      </div>
+
+      <div class="card obs">
+        <div class="tag"><span class="dot"></span>Observed</div>
+        <h4>Deposits and exits emit no live event</h4>
+        <p>The activity stream carries swap and send entries only. A confirmed boarding deposit did not appear until a manual refresh. Screen-scoped polls cap at ~10 minutes — about one signet block — so a poll can expire before its confirmation.</p>
+        <p class="cite">usePollWhileWaiting.ts:34,42 · wavelength#875</p>
+        <div class="impl"><b>Design implication</b>Do not rely on the stream for money-in. Reconcile on foreground and on a schedule, and always expose a manual refresh — even on an empty wallet.</div>
+      </div>
+
+      <div class="card src">
+        <div class="tag"><span class="dot"></span>Source</div>
+        <h4>Some funds cannot be unilaterally exited</h4>
+        <p>Two exit-infeasibility reasons are structural and permanent: <span class="k">sweep_below_dust</span> and <span class="k">uneconomical</span>. Unilateral exit also needs fee UTXOs in the backing wallet; forced unroll requires a literal <span class="k">I_KNOW_WHAT_I_AM_DOING</span>.</p>
+        <p class="cite">generated.d.ts:849,873</p>
+        <div class="impl"><b>Design implication</b>A wallet can hold value it cannot escape without the operator. That is a hole in the self-custody claim — surface it at deposit time, not exit time.</div>
+      </div>
+
+      <div class="card unv">
+        <div class="tag"><span class="dot"></span>Unverified</div>
+        <h4>Credit totals can read as zero</h4>
+        <p>Credit numbers are quoted by the closed swap server, not computed locally. A 500 sat send reported a required 1,000 top-up, and a credit-rail quote can report total outflow of zero while the top-up is a real cost.</p>
+        <p class="cite">swapwallet/router.go:777,790</p>
+        <div class="impl"><b>Design implication</b>Define "total" as total cost to the user, including any credit top-up. A payment that shows a total of 0 is not comprehensible.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="balance">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">04</span><h2>The balance model</h2></div>
+    <p class="sec-intro">Balance is one atomic snapshot of five independent fields, not a running total. It is the only source of truth for value — deriving it from activity, or activity from it, produced double-counted totals. Only one field is spendable.</p>
+
+    <div class="bal">
+      <div class="field spend"><div class="fn">confirmed_sat</div><div class="fd">spendable. Sum of <b>live VTXOs only</b>, traced end to end from SumSpendableBalance(ListLiveVTXOs)</div></div>
+      <div class="field"><div class="fn">pending_in_sat</div><div class="fd">boarding only — confirmed, unconfirmed and adopted deposits. An unpaid invoice leaves this at zero</div></div>
+      <div class="field"><div class="fn">pending_out_sat</div><div class="fd">pending boarding sweep, and a queued cooperative exit (contrary to the code comment)</div></div>
+      <div class="field"><div class="fn">credit_available_sat</div><div class="fd">server-side credit ledger, spendable via the credit rail</div></div>
+      <div class="field"><div class="fn">credit_reserved_sat</div><div class="fd">credit committed to an in-flight operation</div></div>
+    </div>
+
+    <div class="prose" style="margin-top:26px">
+      <p>Two facts sit behind that green field. Spendable is live-VTXO only by deliberate design — mapping the conflated total onto <span class="k">confirmed_sat</span> "would tell the user they have spendable balance immediately after a faucet deposit, before any round commit". And an expired VTXO only leaves the live set once the client processes a block epoch, so a wallet reopened after a long closure can briefly overstate what it holds. That transient window is exactly bark's symptom, and is what test L1 must measure.</p>
+      <p>The snapshot also excludes the on-chain backing wallet entirely; this harness reads that figure separately by previewing a sweep. Source: swapwallet/service.go:595, waved/rpc_server.go:750, src/lib/balance.ts:5.</p>
+    </div>
+  </div>
+</section>
+
+<section id="l2">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">05</span><h2>The ten-minute receive block</h2></div>
+    <p class="sec-intro">This is the headline risk, and it is no longer a mystery. On one run of five, creating an invoice hung for 602,812 milliseconds and failed with an internal error — the same user-visible failure that shelved bark. Reading the source settled where the wait lives and why it lasts ten minutes.</p>
+
+    <div class="prose">
+      <p>The failing call registers a receive script with the operator's indexer over the mailbox. The daemon's <span class="k">AwaitRPC</span> blocked on a reply from the operator that never arrived, and waited out a fixed time-to-live. That TTL is a constant: <span class="k">DefaultResponseWaiterTTL = 10 * time.Minute</span>, wired everywhere as the default and exposed nowhere. The error surfaces up seven frames, all in the public source:</p>
+    </div>
+
+    <div class="errtrace" style="margin:26px 0" aria-label="Error chain, outermost to failing hop">
+      <div class="frame"><span class="fmsg">create receive invoice</span><span class="floc">sdk/wavewalletdk/client.go:359</span></div>
+      <div class="frame"><span class="fmsg">start receive</span><span class="floc">swapwallet/recv.go:96</span></div>
+      <div class="frame"><span class="fmsg">start receive swap</span><span class="floc">swapclientserver/service.go:1481</span></div>
+      <div class="frame"><span class="fmsg">allocate claim receive script</span><span class="floc">sdk/swaps/out_swap.go:652</span></div>
+      <div class="frame"><span class="fmsg">create receive script</span><span class="floc">sdk/ark/client.go:629</span></div>
+      <div class="frame"><span class="fmsg">unable to create OOR receive script</span><span class="floc">waved/rpc_oor_receive.go:74</span></div>
+      <div class="frame"><span class="fmsg">register receive script → response waiter expired</span><span class="floc">receive_script.go:477 · response_registry.go:16</span></div>
+    </div>
+
+    <div class="callout" style="margin-bottom:26px">
+      <div class="eyebrow">Why the release we run is exposed</div>
+      <p>Lightning Labs diagnosed this exact cause on a different RPC in issue #1041 and fixed it in PR #1044 — client-side gRPC keepalive so a silently dead operator connection is caught in seconds, not ten minutes. It merged on 23 July 2026. v0.1.0 was tagged on 21 July and carries no backport, so our build dials the operator with no keepalive.</p>
+      <p>Keepalive shortens the dead-connection case; it does not bound the waiter. The mailbox and connection code is byte-identical between v0.1.0 and main, so a reply lost for any other reason still hangs for the full ten minutes. We measured the server-side half already live on signet: six streamless pings, 30 seconds apart, all acknowledged.</p>
+    </div>
+
+    <div class="tblwrap">
+      <table>
+        <thead><tr><th>Run</th><th>Round settled</th><th class="num">In-round calls</th><th class="num">Worst call</th><th>Verdict</th></tr></thead>
+        <tbody>
+          <tr class="block"><td>1 · 24 Jul</td><td>+255 to +858s</td><td class="num">28</td><td class="num">602,812 ms</td><td><span class="pill bad">blocked</span></td></tr>
+          <tr><td>2 · 24 Jul</td><td>+94s</td><td class="num">14</td><td class="num">1,854 ms</td><td><span class="pill ok">clean</span></td></tr>
+          <tr><td>3 · 24 Jul</td><td>+1,006s</td><td class="num">97</td><td class="num">2,652 ms</td><td><span class="pill ok">clean</span></td></tr>
+          <tr><td>4 · 28 Jul</td><td>+1,655s</td><td class="num">172</td><td class="num">3,341 ms</td><td><span class="pill ok">clean</span></td></tr>
+          <tr><td>5 · 28 Jul</td><td>+476s</td><td class="num">54</td><td class="num">3,225 ms</td><td><span class="pill ok">clean</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose" style="margin-top:14px;font-size:.86rem;color:var(--faint);font-family:var(--mono)">Round execution and round duration are both ruled out as the trigger: four runs executed rounds, two of them longer than the blocked run, all clean. The round now looks like a coincidence.</p>
+
+    <div class="prose" style="margin-top:22px">
+      <p>The client cannot fully defend itself against this today. The SDK's <span class="k">receive()</span> takes no signal or timeout, so a wallet can race the promise and stop waiting, but cannot cancel the call — the abandoned call runs on to the TTL inside the daemon. That is harmless only if a stuck call holds nothing else, which is the one thing left to confirm with a forced reproduction.</p>
+    </div>
+  </div>
+</section>
+
+<section id="backend">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">06</span><h2>Where a backend earns its place</h2></div>
+    <p class="sec-intro">Wavelength is self-custodial and runs entirely on the device; there is no server SDK to call. A backend's value is therefore specific — supply what the client hides, watch what a closed app cannot, and reconcile what the stream drops. Each recommendation below names the verified fact it rests on.</p>
+
+    <div class="recs">
+      <div class="rec"><div class="rn">A</div><div>
+        <h4>Serve the operator terms the SDK withholds</h4>
+        <p>Run a daemon or terms oracle backend-side, read the full policy set, and hand the app the VTXO floor, balance cap and fee inputs. Then the app can compute the true maximum sendable and reject impossible amounts at entry instead of at a failed confirmation.</p>
+        <p class="basis"><b>Rests on</b> ServerInfo exposes 1 of 11 policy values (generated.d.ts:273)</p>
+      </div></div>
+
+      <div class="rec"><div class="rn">B</div><div>
+        <h4>Own the L1 refresh the device cannot guarantee</h4>
+        <p>A closed app runs no refresh, and iOS background execution cannot be relied on. A backend agent — a delegated or watchtower-style refresher — is the only way to keep an idle user's VTXOs alive. Absent that, cap how long value may sit in Ark and tell the user plainly.</p>
+        <p class="basis"><b>Rests on</b> in-process daemon; no background capability found (inference)</p>
+      </div></div>
+
+      <div class="rec"><div class="rn">C</div><div>
+        <h4>Surface the expiry deadline, don't wait for the loss</h4>
+        <p>Every VTXO exposes its batch expiry and the current block height, so blocks-remaining is computable today with no SDK change. A backend can watch this and notify — "open the app before block N to keep this balance safe" — turning a silent loss into a visible deadline.</p>
+        <p class="basis"><b>Rests on</b> WalletVTXO.batchExpiry + Info.blockHeight (generated.d.ts:573,263)</p>
+      </div></div>
+
+      <div class="rec"><div class="rn">D</div><div>
+        <h4>Reconcile from the balance snapshot, never from activity</h4>
+        <p>Do not build a running-balance ledger from Ark activity — the codebase forbids it, and it double-counts. Mirror the rule server-side: treat the balance snapshot as truth, use activity only as history, and drive money-in detection from reconciliation, not the live stream.</p>
+        <p class="basis"><b>Rests on</b> balance is the sole source of truth (src/lib/balance.ts:5); deposits emit no event (#875)</p>
+      </div></div>
+
+      <div class="rec"><div class="rn">E</div><div>
+        <h4>Wrap every call in a deadline; treat receive as retry-safe</h4>
+        <p>Race each call against a short client deadline so a lost reply fails in seconds, not ten minutes. Retrying a receive is safe — an unpaid invoice costs nothing and expires. But a send is not retry-safe against the same intent, so classify outcomes by the typed failure code, never by error strings.</p>
+        <p class="basis"><b>Rests on</b> receive() has no timeout; 10-min TTL; EntryFailureCode enum (generated.d.ts:1172)</p>
+      </div></div>
+
+      <div class="rec"><div class="rn">F</div><div>
+        <h4>Coordinate invoice and intent lifecycles</h4>
+        <p>A failed payer attempt appears to burn the payee's receive intent, killing that invoice. If a backend issues invoices for users, it must treat each as single-use, detect the burn, and mint a fresh invoice rather than surfacing a reused-intent error to either side.</p>
+        <p class="basis"><b>Rests on</b> intent burn is deliberate (send_intents.go:92); payee-side burn unverified, swap server closed</p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<footer class="wrap">
+  <div class="eyebrow" style="margin-bottom:14px">Still open</div>
+  <ul class="clean">
+    <li><b>L1 through a real closure.</b> Measure how long after reopen the balance corrects, and confirm the operator reclaims the backing. Both are inferred, not observed.</li>
+    <li><b>Whether a stuck receive holds the wallet.</b> One forced-blackhole reproduction distinguishes a single lost reply from a wallet-wide stall — the difference between a retryable glitch and bark's failure.</li>
+    <li><b>What this operator actually advertises.</b> Every number here is one operator's policy on signet. None can be read from the client.</li>
+    <li><b>The payee-side intent burn.</b> Needs the closed swap-server source or a controlled regtest reproduction.</li>
+  </ul>
+  <div class="foot-grid" style="margin-top:28px">
+    <span>verified against ff510b11 · re-audited 28 July 2026</span>
+    <span>full detail: PAYMENT_TEST_FRAMEWORK.md · WAVELENGTH_CONSTRAINTS.md · RECEIVE_BLOCK_ROOT_CAUSE.md</span>
+  </div>
+  <p class="foot-note">Read nothing here as final beyond its provenance. Source claims are cited and safe to build on; Observed claims are one or two signet afternoons; Unverified claims are hypotheses. Re-verify against the tag whenever the pinned Wavelength version changes — every past correction came from treating an observed number as a constant.</p>
+</footer>
+
+</main>
+
+<script>
+(function(){
+  var c=document.getElementById('trace');if(!c)return;
+  var ctx=c.getContext('2d'),dpr=Math.min(window.devicePixelRatio||1,2);
+  function accent(){return getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()||'#5A47E0';}
+  function unv(){return getComputedStyle(document.documentElement).getPropertyValue('--unv').trim()||'#C13E5A';}
+  var W,H;
+  function size(){W=c.clientWidth;H=c.clientHeight;c.width=W*dpr;c.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);}
+  // Run 1 as a signal: steady receive pulses, a flat ten-minute dropout, recovery.
+  function draw(p){
+    ctx.clearRect(0,0,W,H);
+    var mid=H*0.5, amp=Math.min(H*0.16,34);
+    var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+    var prog=reduce?1:p;
+    ctx.lineWidth=1.5;ctx.lineJoin='round';ctx.lineCap='round';
+    // pre-block pulses (0 .. 0.42), flat block (0.42 .. 0.72), recovery (0.72 .. 1)
+    var xEnd=W*prog;
+    ctx.strokeStyle=accent();ctx.globalAlpha=0.9;ctx.beginPath();
+    var started=false;
+    for(var x=0;x<=W;x+=2){
+      if(x>xEnd)break;
+      var t=x/W, y;
+      if(t<0.42){ // healthy pulses ~1.5s cadence
+        var ph=Math.sin(t*Math.PI*2*26);
+        y=mid - Math.sign(ph)*Math.pow(Math.abs(ph),0.35)*amp*0.5;
+      } else if(t<0.72){ // the stall: pinned flat at the ceiling
+        y=mid-amp;
+      } else {
+        var ph2=Math.sin((t-0.72)*Math.PI*2*26);
+        y=mid - Math.sign(ph2)*Math.pow(Math.abs(ph2),0.35)*amp*0.5;
+      }
+      if(!started){ctx.moveTo(x,y);started=true;}else{ctx.lineTo(x,y);}
+    }
+    ctx.stroke();
+    // mark the block region in the unverified/red hue
+    if(prog>0.42){
+      var bx0=W*0.42, bx1=Math.min(xEnd,W*0.72);
+      ctx.globalAlpha=0.16;ctx.fillStyle=unv();
+      ctx.fillRect(bx0,mid-amp-6,bx1-bx0,12);
+      ctx.globalAlpha=1;
+    }
+    ctx.globalAlpha=1;
+  }
+  size();
+  var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+  if(reduce){draw(1);}
+  else{
+    var t0=null;
+    function frame(ts){if(t0===null)t0=ts;var p=Math.min((ts-t0)/2200,1);draw(p);if(p<1)requestAnimationFrame(frame);}
+    requestAnimationFrame(frame);
+  }
+  var to;window.addEventListener('resize',function(){clearTimeout(to);to=setTimeout(function(){size();draw(1);},150);});
+  // redraw on theme toggle so canvas colors track tokens
+  new MutationObserver(function(){draw(1);}).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+})();
+</script>

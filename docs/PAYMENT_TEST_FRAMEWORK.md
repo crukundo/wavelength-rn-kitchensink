@@ -225,7 +225,7 @@ Round trips between Alice and Bob work once both wallets hold VTXOs of a workabl
 
 Two findings that change what is buildable, both from the v0.1.0 type surface.
 
-Expiry is visible per VTXO. `WalletVTXO` carries `batchExpiry` and `relativeExpiry` alongside amount and status (`generated.d.ts:569`), and `Info` carries `blockHeight`. So `batchExpiry - blockHeight` gives blocks remaining on every VTXO the wallet holds, today, with no SDK change.
+Expiry is visible per VTXO. `WalletVTXO` carries `batchExpiry` and `relativeExpiry` alongside amount and status (`generated.d.ts:573`), and `Info` carries `blockHeight` (`generated.d.ts:263`). So `batchExpiry - blockHeight` gives blocks remaining on every VTXO the wallet holds, today, with no SDK change.
 
 That is the mitigation for question 1. A wallet can know, and therefore tell the user, when its money needs attention. Something like "open Kesh before 3 August to keep this balance safe" is buildable now. It does not remove the lease, but it converts a silent loss into a visible deadline, which is the difference between a bug and a product decision.
 
