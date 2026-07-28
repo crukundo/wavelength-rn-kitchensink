@@ -286,7 +286,7 @@ Known gaps in the matrix itself: of 22 tests, seven have results and one of thos
 What would need to be true for this to carry real user money.
 
 - an answer to L1 that does not depend on the user opening the app. Background refresh, a delegated server-side agent, or an explicit product limit on how long value may sit in Ark
-- L2 resolved one way or the other. Receive blocked for ten minutes and failed on one run of five. Two things now need to be true: a build carrying the keepalive fix, since v0.1.0 does not, and a bound on the response waiter that is shorter than ten minutes or a typed error when it gives up. We can supply the second ourselves with a context deadline on the receive call; the first needs a release or a build from main
+- L2 resolved one way or the other. Receive blocked for ten minutes and failed on one run of five. Two things now need to be true: a build carrying the keepalive fix, since v0.1.0 does not, and a bound the app controls on user-facing calls. The SDK gives no way to cancel a call — `receive()` takes no signal or timeout — so the app can only race and abandon, which is safe for receive if and only if a stuck call holds nothing. The forced reproduction settles that condition
 - a spendable-amount model enforced at entry, so users never reach a confirmation screen for a payment that cannot succeed
 - a balance presentation that survives fees and refreshes moving the number on its own
 - LNURL confirmed as supported, since it is in the Kesh requirement and is not yet demonstrated here

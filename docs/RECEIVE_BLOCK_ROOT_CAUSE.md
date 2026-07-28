@@ -109,7 +109,7 @@ The probe's two discriminators now map onto two mechanisms with different predic
 
 Run 1 could distinguish neither, because the serial sampler attempted nothing during the ten minutes it was stuck.
 
-For Kesh there is a mitigation available today, independent of upstream. The block is a wait with no deadline. Passing a context deadline on the receive call bounds it at our own chosen value and turns a ten-minute hang into a fast, typed failure we can retry or explain. That does not fix the lost response, but it removes the part of the failure that is unusable in a product.
+For Kesh there is a partial mitigation available today, and its limit matters. The SDK's `receive()` takes no signal or timeout — checked against the 0.1.0 type surface, which has no abort, timeout or deadline anywhere. So the app cannot cancel the call; it can only race it and stop waiting. A 15-second race turns the ten-minute hang into a fast retry for the user, and retrying receive is safe because an unpaid invoice costs nothing and expires. But the abandoned call runs on inside the daemon to the full TTL. That is harmless only if a stuck call holds nothing — which is exactly the head-of-line question the forced reproduction answers. If a stuck call blocks the wallet, the retry stalls too and no client-side bound helps. Send is different again: abandoning a send leaves the user not knowing whether money moved, so the pay path needs typed outcomes, not a shorter wait.
 
 ## Reproducing it on demand
 

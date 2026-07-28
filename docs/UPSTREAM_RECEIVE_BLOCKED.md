@@ -10,7 +10,7 @@ That makes this the same root cause as [wavelength#1041](https://github.com/ligh
 
 Post as a comment on issue 1041 rather than opening a new issue. It is closed, but the report is a second manifestation of a cause that issue already names, and the maintainers who fixed it are subscribed there.
 
-Open a separate issue only for the waiter TTL, if at all. That is a design question rather than an incident, and it stands on its own: even with keepalive, a lost response strands a user-facing call for ten minutes.
+Open a separate issue only for the client-surface deadline, if at all. The question changed on 28 July 2026 after checking the SDK types: `receive()` takes no signal or timeout, so a wallet can stop waiting but cannot cancel the call. That gap matters more than the TTL's exact value — with a per-call deadline the 10-minute waiter becomes invisible plumbing, and without one it is the effective user-facing bound for anyone who does not hand-roll a race.
 
 ## What is new, and worth their time
 
@@ -26,7 +26,7 @@ Everything below the line is the comment text.
 
 ---
 
-We hit what looks like the same root cause as this issue, on a different RPC path, from a mobile client on the released v0.1.0. Commenting here rather than opening a new issue since #1044 already names the mechanism.
+We hit what looks like the same root cause as this issue, on a different RPC path, from a mobile client on the released v0.1.0. We are commenting here rather than opening a new issue because #1044 already names the mechanism.
 
 One `receive` call blocked for 602,812 ms and then failed:
 
@@ -38,10 +38,13 @@ unable to create OOR receive script: register receive script:
 response waiter expired
 ```
 
-The failing hop is `RegisterReceiveScriptTaproot` (`waved/receive_script.go:477`) on the indexer client, which rides the operator mailbox (`indexer/client.go:173`). So it is waved's `AwaitRPC` blocked on a reply from lumosd that never arrived — the same sentence as #1044, on the OOR receive-script path instead of `CreateCredit`. The duration is `DefaultResponseWaiterTTL` plus the lazy prune in `pruneStaleLocked`.
+The failing hop is `RegisterReceiveScriptTaproot` (`waved/receive_script.go:477`) on the indexer client, which rides the operator mailbox (`indexer/client.go:173`). waved's `AwaitRPC` waited for a reply from lumosd that never arrived — the same sentence as #1044, on the OOR receive-script path instead of `CreateCredit`. The duration is `DefaultResponseWaiterTTL` plus the lazy prune in `pruneStaleLocked`.
 
-It happened once in five runs of the same procedure: signet, `signet.wavelength.lightning.finance`, 24 July 2026, blocked call about 14:05:21 to 14:15:45 UTC. The other four runs were clean, worst call 3,341 ms across 337 invoices. The blocked call wrote no `receive_swaps` row, so it failed before any swap state was persisted. Client: v0.1.0 (`ff510b11`) via `wavelength-react-native` 0.1.0, React Native 0.81.5, iOS 18.6 simulator.
+It happened once in 5 runs of the same procedure: signet, `signet.wavelength.lightning.finance`, 24 July 2026, blocked call about 14:05:21 to 14:15:45 UTC. The other 4 runs were clean: 337 invoices, worst call 3,341 ms. The blocked call wrote no `receive_swaps` row, so it died before writing any swap state. Client: v0.1.0 (`ff510b11`), `wavelength-react-native` 0.1.0, React Native 0.81.5, iOS 18.6 simulator.
 
-Two small things that may be useful. Since we are on the released tag, we noticed #1044 has no `backport-1044-to-v0.1.x-branch` yet while many neighbouring PRs do — flagging it in case that is an oversight rather than a decision. And on the deployment concern in the #1044 review: the signet operator now accepts streamless 30s pings — we sent six in a row over raw HTTP/2, all acked, no `GOAWAY` — so the lumos#699 leg looks live.
+Two observations that may help:
 
-One question, when someone has a moment. Is the ten-minute `DefaultResponseWaiterTTL` intended as the outer bound for user-facing calls, or a safety net that was never meant to be reached? Keepalive shortens the dead-connection case, but a response lost for any other reason still waits out the full TTL, and nothing exposes it to configure. No urgency on our side — we are wrapping our calls in a shorter context deadline in the meantime.
+- #1044 has no `backport-1044-to-v0.1.x-branch` yet, while many neighbouring PRs do. We flag it in case that is an oversight rather than a decision
+- the signet operator now accepts streamless 30-second pings. We sent 6 in a row over raw HTTP/2 and all were acked with no `GOAWAY`, so the lumos#699 leg looks live. This answers the deployment concern raised in the #1044 review
+
+One question, when someone has a moment. Is a per-call deadline or cancellation planned for the client surface? `receive()` takes no signal or timeout today, so the 10-minute `DefaultResponseWaiterTTL` is the effective bound on a lost response. A JS-side race abandons the call without cancelling it. A deadline, plus a typed error that separates a retryable network failure from a real one, would let a wallet keep this away from users entirely. No urgency — we are reporting more than requesting.
