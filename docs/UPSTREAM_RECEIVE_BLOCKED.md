@@ -55,7 +55,7 @@ The failing hop is `RegisterReceiveScriptTaproot` (`waved/receive_script.go:477`
 
 Those two stamps are the gap in our `swaps.db` rows: 22 successful receives ended at 14:05:21 UTC, nothing was written for ten minutes, and the next row is at 14:15:45 UTC. The blocked call wrote no row at all.
 
-The daemon had been running for some hours on one connection, which is consistent with the stale-connection story in #1044.
+The wallet had been open and active through a few hours of testing before the block. We did not record whether the underlying connection had been re-dialed in that time, so we cannot say how old the connection itself was — only that the shape of the failure matches the stale-connection story in #1044.
 
 ## Why we are posting it
 
@@ -63,7 +63,7 @@ Two asks, both small.
 
 First, v0.1.0 does not have #1044. It is tagged at `ff510b11` from 21 July and the fix merged on 23 July; `v0.1.x-branch` has no backport and v0.1.0 is the only release. Anyone building a client against the released tag still dials the operator with no keepalive. Is a v0.1.1 planned, or should integrators build from main?
 
-On the concern you raised in the #1044 review, the signet operator does now accept the pings. We checked from outside with raw HTTP/2 PING frames, no stream open and no RPC: six pings 30 seconds apart were all acknowledged with no `GOAWAY`. Under the default policy the fourth would have ended the connection, since `defaultPingTimeout` is 2 hours and every streamless ping strikes. Four pings at 1.35 seconds did draw `GOAWAY too_many_pings`, which puts `MinTime` somewhere under 30 seconds and is consistent with the 15s in lumos#699. So that leg looks deployed, at least on signet.
+On the concern you raised in the #1044 review, the signet operator does now accept the pings. We checked from outside with raw HTTP/2 PING frames, no stream open and no RPC: six pings 30 seconds apart were all acknowledged with no `GOAWAY`. Under the default policy the fourth would have ended the connection, since `defaultPingTimeout` is 2 hours and every streamless ping strikes. Four pings at 1.35 seconds did draw `GOAWAY too_many_pings`, which bounds `MinTime` above 1.35 and at most 30 seconds — consistent with the 15s in lumos#699. So that leg looks deployed, at least on signet.
 
 Second, keepalive bounds the common case but not the waiter. `mailbox/` and `serverconn/` are unchanged between v0.1.0 and main, so a response lost for any other reason still strands the caller for ten minutes. Is a ten-minute TTL intended as the outer bound for a user-facing call, or is it a safety net that was never meant to be reached? From a client we cannot set it — `ResponseWaiterTTL` takes the default everywhere and nothing exposes it.
 

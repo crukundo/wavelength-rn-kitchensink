@@ -94,7 +94,7 @@ The other two rows discriminate nothing on their own, and an earlier reading of 
 
 So the blocker the review thread raised does not apply here. A build carrying PR 1044 would be safe against this operator rather than churning against it, which removes the main risk from testing one.
 
-The certificate is `CN=lumosd-signet.staging.lightningcluster.com`, issued by Amazon RSA 2048 M04, with `signet.wavelength.lightning.finance` in the SAN. An AWS-issued certificate means something AWS terminates TLS, so in principle a load balancer could be answering these pings rather than lumosd. The `GOAWAY` behaviour matches grpc-go's strike counter exactly, which argues against that, but it is not proof.
+The certificate is `CN=lumosd-signet.staging.lightningcluster.com`, issued by Amazon RSA 2048 M04, with `signet.wavelength.lightning.finance` in the SAN. An AWS-issued certificate means something AWS terminates TLS, so in principle a load balancer could be answering these pings rather than lumosd. The `GOAWAY` behaviour matches grpc-go's strike counter exactly — the `too_many_pings` debug string is grpc-go's own — which argues against that, but it is not proof. The name also resolves to three addresses, so different probe runs may have landed on different backends; the 30-second run alone establishes the policy on whichever backend served it.
 
 ## What this changes
 
