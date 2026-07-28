@@ -741,7 +741,7 @@ export function LockProbeScreen({
         <Text style={styles.intro}>
           {mode === 'fast'
             ? 'Fast runs for 90 seconds. That shows whether waiting for a round blocks receive, but the round itself may not execute in the window — on 24 July it had not, three minutes later.'
-            : 'Long keeps probing until the exit settles, then for another minute after. That is the only way to catch the round actually executing. It gives up after 30 minutes.'}
+            : `Long keeps probing until the exit settles, then for another minute after. That is the only way to catch the round actually executing. It gives up after ${cfg.capMs / 60_000} minutes.`}
         </Text>
         <View style={styles.rows}>
           <SummaryRow label="Probe amount" value={`${formatSats(PROBE_AMOUNT_SAT)} sats`} />
