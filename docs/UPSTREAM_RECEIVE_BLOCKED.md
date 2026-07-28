@@ -1,6 +1,6 @@
 # Upstream issue draft: receive blocked for ten minutes
 
-Reproduced once in three runs. The two candidate causes we could name have both been ruled out, so this now reports a symptom without a theory — which is fine to file, as long as it does not claim one. Read [PAYMENT_TEST_FRAMEWORK.md](PAYMENT_TEST_FRAMEWORK.md) before posting. Everything below the line is the issue text.
+Reproduced once in four runs. The two candidate causes we could name have both been ruled out, so this now reports a symptom without a theory — which is fine to file, as long as it does not claim one. Read [PAYMENT_TEST_FRAMEWORK.md](PAYMENT_TEST_FRAMEWORK.md) before posting. Everything below the line is the issue text.
 
 ---
 
@@ -10,14 +10,14 @@ Reproduced once in three runs. The two candidate causes we could name have both 
 
 ## Summary
 
-We saw one `receive` call block for 602,812 ms — ten minutes — and then fail with `code = Internal`. It reproduced once in three runs of the same procedure on the same wallet against the same operator.
+We saw one `receive` call block for 602,812 ms — ten minutes — and then fail with `code = Internal`. It reproduced once in four runs of the same procedure on the same wallet against the same operator.
 
-We are not claiming a cause, and we are not claiming the round caused it. The block happened while a cooperative exit was outstanding, which is how we came to be watching, but two runs of the same procedure executed rounds with receive untouched.
+We are not claiming a cause, and we are not claiming the round caused it. The block happened while a cooperative exit was outstanding, which is how we came to be watching, but three runs of the same procedure executed rounds with receive untouched.
 
 We tried two explanations and ruled both out:
 
-- **not round execution.** The block happened with a cooperative exit outstanding, but the two clean runs also executed rounds end to end, one of them across 97 invoices
-- **not a slow or degraded operator.** The third run's round took 1,006 seconds, longer than the blocked run's round could have been, and no call exceeded 2,652 ms
+- **not round execution.** The block happened with a cooperative exit outstanding, but the three clean runs also executed rounds end to end, one of them across 172 invoices
+- **not a slow or degraded operator.** The third and fourth runs took 1,006 and 1,655 seconds, both longer than the blocked run's round could have been, and no call exceeded 3,341 ms
 
 So this is a symptom report. A `receive` can hang for ten minutes and return an untyped internal error, and we cannot predict when.
 
@@ -49,16 +49,16 @@ Run 1, timeline measured from the moment the exit was queued. Idle baseline 1,41
 
 One caveat on that third row, since it would otherwise read as the block ending exactly when the round did. Our probe checked the balance only after an invoice call returned, and no call returned between +255s and +858s, so it could not have observed settlement any earlier than it did. The round settled somewhere in that window. We are not claiming the two events coincided.
 
-Runs 2 and 3, same procedure, same wallet, later the same afternoon.
+Runs 2 to 4, same procedure, same wallet. Runs 2 and 3 followed later the same afternoon; run 4 was four days later.
 
-| | Run 2 | Run 3 |
-| --- | --- | --- |
-| Round settled | +94s | +1,006s |
-| In-round calls | 14 | 97 |
-| Worst call | 1,854 ms | 2,652 ms |
-| Failures | 0 | 0 |
+| | Run 2 | Run 3 | Run 4 |
+| --- | --- | --- | --- |
+| Round settled | +94s | +1,006s | +1,655s |
+| In-round calls | 14 | 97 | 172 |
+| Worst call | 1,854 ms | 2,652 ms | 3,341 ms |
+| Failures | 0 | 0 | 0 |
 
-Run 3 also ran a control on a second wallet — separate app container, separate daemon, same operator — probing continuously with no round of its own: 99 overlapping calls, worst 1,803 ms, no failures. Since run 3 did not block, that control does not localise anything yet; we mention it so you know the comparison is available on the next reproduction.
+Runs 3 and 4 also ran a control on a second wallet — separate app container, separate daemon, same operator — probing continuously with no round of its own. Run 4's pairing is the tightest data we have: 172 calls on the wallet in the round at a median of 1,661 ms, against 183 calls on the control at 1,635 ms. Being in a round does not measurably slow `receive`. Since neither run blocked, the control does not localise anything yet; we mention it so you know the comparison is available on the next reproduction.
 
 One incidental detail that may help you locate the failure. Every successful `receive` writes a `receive_swaps` row in `swaps.db` stamped with `created_at_unix`, and run 1's rows line up with our timings exactly. The blocked call wrote no row at all, so it failed before any swap state was persisted.
 
@@ -96,6 +96,6 @@ Two things made this harder to investigate than it needed to be. Happy to file e
 
 ## Reproduction harness
 
-We built a small probe for this and can share it if useful: it takes baseline timings, starts the cooperative exit without awaiting it, then dispatches an invoice every ten seconds — on the clock, without waiting for the previous one — until `pending_out_sat` returns to its pre-exit level, plus a minute after. One run in three has shown the block, so expect to run it several times.
+We built a small probe for this and can share it if useful: it takes baseline timings, starts the cooperative exit without awaiting it, then dispatches an invoice every ten seconds — on the clock, without waiting for the previous one — until `pending_out_sat` returns to its pre-exit level, plus a minute after. One run in four has shown the block, so expect to run it several times.
 
 Dispatching without waiting is deliberate, and we would suggest it to anyone trying to reproduce this. Our first version awaited each call, so the ten-minute block was ten minutes in which nothing else was attempted, and the run cannot distinguish one call losing its response from every receive being blocked. The current version keeps issuing calls during a stall, capped at four outstanding. For reference, on a healthy wallet we measured 92 invoices with up to three in flight at 1.26 to 2.07 seconds each, against 1.36 to 2.08 seconds issued one at a time — concurrency alone does not slow this path.

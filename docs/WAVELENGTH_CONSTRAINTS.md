@@ -115,7 +115,7 @@ response waiter expired
 
 The block ran from 255 to about 858 seconds after the exit was queued. The round settled somewhere inside that window; the probe recorded 857 seconds but could not have seen it any earlier, because it only checked the balance after an invoice call returned and none returned during the block. Before and after the window, invoice creation took 1.2 to 2.4 seconds.
 
-Two further runs did not reproduce it. One settled its round in 94 seconds, the other in 1,006 — longer than the blocked run's round could have been — and neither showed a call over 2.7 seconds across 111 in-round invoices between them. See test L2 in [PAYMENT_TEST_FRAMEWORK.md](PAYMENT_TEST_FRAMEWORK.md) for all three timelines.
+Three further runs did not reproduce it. Their rounds settled in 94, 1,006 and 1,655 seconds — the last two both longer than the blocked run's round could have been — and none showed a call over 3.4 seconds across 283 in-round invoices between them. See test L2 in [PAYMENT_TEST_FRAMEWORK.md](PAYMENT_TEST_FRAMEWORK.md) for all four timelines.
 
 The failing step is the OOR receive-script registration that the receive path needs. `response waiter expired` is a wait on a response that never arrived, not the local mutex bark held. The wait expired at about ten minutes, which is a bound but not a useful one.
 
@@ -127,9 +127,11 @@ Design implication, whichever way it resolves. A `receive` call can take ten min
 
 Observed, 24 July 2026, signet. A 1,000 sat VTXO exited cooperatively arrived in the backing on-chain wallet as 743 sats. The 257 sats went to fees, a quarter of the value.
 
-Timing, same run: queued at 16:48 and settled between 16:51 and 16:59. Later runs settled in 94 seconds and in 1,006 seconds, so treat two to seventeen minutes as the observed spread rather than quoting a typical figure. A fourth run settled somewhere between 255 and 858 seconds, but its probe could not measure where.
+Timing varies enormously. Measured settlements are 94, 1,006 and 1,655 seconds, so the observed spread is about two to twenty-eight minutes. Do not quote a typical figure. Two other runs settled inside windows we could not measure: one between 16:51 and 16:59 on the clock, and one between 255 and 858 seconds after queueing.
 
 One point on an operator fee schedule that varies with amount and remaining blocks, so do not extrapolate the rate. Note only how badly a flat-ish fee scales down: 255 on a 2,000 sat board, 257 on a 1,000 sat exit.
+
+A below-floor VTXO can still exit. Observed 28 July 2026: a 744 sat VTXO, under the operator's 1,000 sat minimum, was queued into a round in 0.1 seconds and settled normally. The minimum constrains what a send may produce, not what an exit may forfeit. That makes an exit the only way such a VTXO can move, which is worth knowing when a wallet has been left holding one.
 
 Design implication. Small VTXOs are close to unexitable in economic terms. A wallet holding many small VTXOs cannot leave Ark without losing a large fraction, and the user should be told the cost per VTXO before boarding into that shape.
 

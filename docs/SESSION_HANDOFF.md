@@ -59,25 +59,27 @@ The object carries `mode`, `control`, `phase`, `joinAt`, `settledAt`, `joinNote`
 
 Each sample is `{id, t, ms, ok, detail, overlap}`. `t` is when the call started, `overlap` is how many calls were already outstanding when it started, and `ms` and `ok` are `null` while a call is still in flight — so a stall is readable while it is happening, not only after it ends. `skipped` counts slots dropped at the concurrency cap; a run that reports any is one where the wallet was already saturated.
 
-## The three L2 runs
+## The four L2 runs
 
-All 24 July 2026, signet, one operator. 1,000 sat VTXO exited each time.
+Runs 1 to 3 on 24 July 2026, run 4 on 28 July. Signet, one operator. A 1,000 sat VTXO exited each time except run 4, which used the 744.
 
-| | Run 1 | Run 2 | Run 3 |
-| --- | --- | --- | --- |
-| Round settled | between +255s and +858s | +94s | +1,006s |
-| In-round calls | 28 | 14 | 97 |
-| Worst call | 602,812 ms, failed | 1,854 ms | 2,652 ms |
-| Verdict | blocked | clean | clean |
+| | Run 1 | Run 2 | Run 3 | Run 4 |
+| --- | --- | --- | --- | --- |
+| Round settled | between +255s and +858s | +94s | +1,006s | +1,655s |
+| In-round calls | 28 | 14 | 97 | 172 |
+| Worst call | 602,812 ms, failed | 1,854 ms | 2,652 ms | 3,341 ms |
+| Verdict | blocked | clean | clean | clean |
 
 Run 1's round was never measured. The old serial sampler only checked settlement after a call returned, and nothing returned for ten minutes, so its recorded +857s is an upper bound stamped when the block cleared. Read the L2 section of the test framework before quoting it: the apparent coincidence between the block clearing and the round settling was the instrument.
 
 Ruled out as the trigger:
 
-- round execution — runs 2 and 3 both executed rounds with receive untouched
-- round duration — run 3's round was longer than run 1's could have been, and stayed clean
+- round execution — runs 2, 3 and 4 all executed rounds with receive untouched
+- round duration — runs 3 and 4 both ran longer rounds than run 1 could have had, and both stayed clean. Run 4's was 1,655 seconds
 
-Run 3 carried a control (Bob): 99 overlapping calls, worst 1,803 ms, no failures. Because run 3 did not block, the control localised nothing this time. It stays in place for the next run.
+Runs 3 and 4 carried a control on Bob. Run 3: 99 overlapping calls, worst 1,803 ms. Run 4: 183 calls, worst 2,246 ms, median 1,635 ms against Alice's 1,661 ms. Neither localised anything, because neither run blocked. The control stays in place.
+
+Run 4 is also the first run of the concurrent sampler. Nothing stalled, so the overlap discrimination never fired: peak in flight was 1 on both wallets, since calls take about 1.6 seconds against a 10-second interval. The instrument works; it has still never met a block.
 
 The failure, when it happened:
 
@@ -90,7 +92,8 @@ register receive script: response waiter expired
 
 - Daemon logs are unreachable from this harness. `useWalletLogs` carries only SDK-level diagnostics, not daemon output. The Go daemon logs to neither that buffer, nor os_log, nor any file in its data directory. Do not spend time re-checking this.
 - `swaps.db` is the evidence source. Every `receive` writes a `receive_swaps` row stamped `created_at_unix`. In run 1 the rows matched the probe to the second, and the blocked call wrote no row at all — it died before any swap state was persisted. Path: `<app container>/Library/Application Support/wavelength/data/signet/swaps.db`.
-- VTXO inventory and states are in `waved.db`, table `vtxos`, column `amount`, `status` 0 = Live, `spent` flag. Handy for reading balance composition without the UI.
+- VTXO inventory and states are in `waved.db`, table `vtxos`, columns `amount`, `status` and `spent`. Handy for reading balance composition without the UI, and safe to read mid-run: copy the file and its `-wal` to the scratchpad and query the copy. Status 0 is Live. Watching the run 4 exit move showed 0 to 2 while the round executed, then 3 once it settled, with `spent` still 0. Rows spent in ordinary sends sit at status 4 with `spent` = 1, so status 3 means exited from Ark rather than spent.
+- Do not navigate away from the probe screen during a run. The screen owns the run state, so leaving it remounts the component and the mount effect republishes an empty `__l2probe`, losing the data.
 - `pending_out_sat` does carry a cooperative exit, contrary to the code comment at `balance.ts:57`. The probe relies on this to detect settlement.
 - Raising `debugLevel` to `trace` needs a runtime restart, which lands on the unlock screen. The wallets are password-protected; the password is held by the user, not recorded here. Ask before any restart, or you risk locking a funded wallet.
 
@@ -105,10 +108,10 @@ Two iOS simulators, both renamed, both running the same dev build against one Me
 
 The Metro logicalDeviceId is what `debugger-connect` needs — the UDID is rejected when two devices share one Metro.
 
-Balances at 13:27 on 28 July 2026, signet. They move on their own from refresh fees, so read them from the app, do not trust these:
+Balances after run 4 on 28 July 2026, signet. They move on their own from refresh fees, so read them from the app, do not trust these:
 
-- Alice: 4,482 spendable across 3 live VTXOs (2,238, 1,500, 744), 500 credit, 2,972 on-chain backing. The 744 is below the 1,000 operator floor, so it can only leave by an exact-value exit. That gives about two more probe runs before Alice needs reboarding.
-- Bob: 26,990 spendable, 500 credit. Untouched since it was the control.
+- Alice: 3,738 spendable across 2 live VTXOs (2,238 and 1,500), 500 credit. The 744 left in run 4, so that is two more probe runs before she needs reboarding from the on-chain backing.
+- Bob: 26,990 spendable, 500 credit. Unspent — he has only ever run controls.
 
 Both wallets are password wallets. Separate simulators give separate app containers, so each wallet has its own dataDir, seed and node identity.
 
@@ -163,7 +166,8 @@ The first question is new, and it is the one run 1 could not answer. The probe n
 
 Practical notes for the run:
 
-- Alice has about two runs of VTXO left. When she runs dry, reboard from her 2,972 on-chain backing, or swap roles and probe from Bob.
+- Alice has two VTXOs left, the 1,500 and the 2,238. When she runs dry, reboard from her on-chain backing, or swap roles and probe from Bob.
+- Budget the wall clock honestly. Run 4's round took 27.6 minutes, and the 30-minute cap nearly cut it off. If rounds keep lengthening, raise `capMs` before starting.
 - The `trace` debugLevel route is the fallback if the control stays ambiguous. It needs a runtime restart and the wallet password. Ask the user first.
 
 ## Also open, lower priority
