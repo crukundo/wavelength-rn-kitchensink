@@ -52,6 +52,31 @@ const BASELINE_SAMPLES = 3;
 // The L2 pass condition: anything longer reproduces the bark failure.
 const FAIL_THRESHOLD_MS = 30_000;
 
+// Calls go out on a fixed cadence and are NOT awaited, so one hung call no
+// longer stops the probe. That is the point. Run 1's ten-minute block was
+// measured by a serial loop, so nothing else was attempted while it hung and
+// the run cannot say what was actually blocked. A second call that starts
+// during a stall and returns normally means one lost response. Every
+// overlapping call stalling means the wallet itself was held, which is the
+// bark failure.
+//
+// Capped so the probe cannot manufacture its own contention: at a 10s interval
+// a ten-minute stall would otherwise leave 60 invoice calls outstanding, which
+// is a load test, not a lock test. A skipped slot is counted, not dropped
+// silently.
+const MAX_IN_FLIGHT = 4;
+
+// Settlement runs on its own clock. It used to be checked only after a sample
+// returned, so the earliest run 1 could stamp settlement was the moment the
+// block cleared — the round settling "exactly when the block cleared" was the
+// instrument, not a finding. This poll is independent of the samples.
+const SETTLE_POLL_MS = 5_000;
+
+// How often the in-flight drain re-checks, and how often the screen re-reads
+// the clock so a call that has been outstanding for minutes still ticks up.
+const DRAIN_POLL_MS = 250;
+const CLOCK_MS = 1_000;
+
 type Mode = 'fast' | 'long';
 
 // The first run of L2 used fast, and its limit is why long exists. exitBatch
@@ -78,11 +103,17 @@ const MODES: Record<
 };
 
 type Sample = {
+  /** Monotonic per run: completions no longer arrive in start order. */
+  id: number;
   /** Absolute time the call STARTED, so offsets survive a late joinAt. */
   t: number;
-  ms: number;
-  ok: boolean;
+  /** null while the call is still outstanding. */
+  ms: number | null;
+  /** null while outstanding. */
+  ok: boolean | null;
   detail: string;
+  /** Calls already outstanding when this one started. 0 means it ran alone. */
+  overlap: number;
 };
 
 type LogLine = {
@@ -92,7 +123,11 @@ type LogLine = {
   message: string;
 };
 
-type Phase = 'idle' | 'baseline' | 'probing' | 'done';
+// draining is the window after the last call is dispatched, when the run is
+// waiting on whatever is still outstanding. A stall caught at the end of the
+// window is the most interesting sample in the run, so it is waited out rather
+// than truncated.
+type Phase = 'idle' | 'baseline' | 'probing' | 'draining' | 'done';
 
 const makeStyles = (p: Palette) => ({
   intro: {
@@ -255,9 +290,24 @@ export function LockProbeScreen({
   const [joinNote, setJoinNote] = useState('');
   const [error, setError] = useState('');
   const [confirm, setConfirm] = useState(false);
+  // Re-read every second while a run is live, so a call that has been
+  // outstanding for minutes shows its elapsed time instead of leaving the
+  // screen looking frozen — which is exactly what run 1 looked like.
+  const [nowMs, setNowMs] = useState(0);
   // Bumped to cancel: the loop compares it against the id it started with, so a
   // stop takes effect at the next iteration even mid-call.
   const runIdRef = useRef(0);
+  // Calls outstanding right now, and the most ever outstanding at once. The
+  // second number is what says whether a clean run actually tested overlap or
+  // simply never had two calls in flight.
+  const inFlightRef = useRef(0);
+  const maxInFlightRef = useRef(0);
+  const sampleIdRef = useRef(0);
+  const skippedRef = useRef(0);
+  // Written by the settlement watcher, read by the dispatch loop's exit
+  // condition. A ref because both run outside React's render cycle.
+  const settledRef = useRef(0);
+  const pendingOutBeforeRef = useRef(0);
   // The loop closes over one render's balance, so it reads the live value
   // through a ref instead. Settlement is the loop's own exit condition.
   const balanceRef = useRef(balance);
@@ -329,45 +379,112 @@ export function LockProbeScreen({
 
   const cfg = MODES[mode];
   const vtxos = listData?.vtxos?.vtxos ?? [];
-  const running = phase === 'baseline' || phase === 'probing';
+  const running =
+    phase === 'baseline' || phase === 'probing' || phase === 'draining';
 
   const loadVtxos = () => {
     void list({ view: 'vtxos' }).catch(() => undefined);
   };
 
-  // One timed invoice. Never throws: a failed call is a data point, not an
-  // error, and the run must continue past it to see whether receive recovers.
-  const probeOnce = async (): Promise<Sample> => {
-    const started = Date.now();
-    try {
-      const res = await receive({
-        amountSat: PROBE_AMOUNT_SAT,
-        memo: 'L2 lock probe',
-      });
+  const wait = (ms: number) =>
+    new Promise((resolve) => setTimeout(resolve, ms));
 
-      return {
-        t: started,
-        ms: Date.now() - started,
-        ok: true,
-        detail: res.entry?.id ? shortKey(res.entry.id, 6, 4) : 'invoice',
-      };
-    } catch (e) {
-      return {
-        t: started,
-        ms: Date.now() - started,
-        ok: false,
-        detail: errorMessage(e),
-      };
+  // Start one timed invoice and return immediately. Never throws: a failed call
+  // is a data point, not an error, and the run must continue past it to see
+  // whether receive recovers. The sample is recorded at dispatch and completed
+  // in place, so an outstanding call is visible while it is still hanging.
+  const dispatch = (live: () => boolean) => {
+    if (inFlightRef.current >= MAX_IN_FLIGHT) {
+      skippedRef.current += 1;
+      return;
+    }
+
+    const id = sampleIdRef.current + 1;
+    sampleIdRef.current = id;
+    const started = Date.now();
+    const overlap = inFlightRef.current;
+    inFlightRef.current += 1;
+    maxInFlightRef.current = Math.max(maxInFlightRef.current, inFlightRef.current);
+    setSamples((prev) => [
+      ...prev,
+      { id, t: started, ms: null, ok: null, detail: '', overlap },
+    ]);
+
+    const finish = (ok: boolean, detail: string) => {
+      // A call left over from a cancelled run must not decrement this run's
+      // counter, which was reset to zero when the run started.
+      if (!live()) {
+        return;
+      }
+
+      inFlightRef.current -= 1;
+      setSamples((prev) =>
+        prev.map((s) =>
+          s.id === id ? { ...s, ms: Date.now() - started, ok, detail } : s,
+        ),
+      );
+    };
+
+    void receive({ amountSat: PROBE_AMOUNT_SAT, memo: 'L2 lock probe' })
+      .then((res) =>
+        finish(true, res.entry?.id ? shortKey(res.entry.id, 6, 4) : 'invoice'),
+      )
+      .catch((e) => finish(false, errorMessage(e)));
+  };
+
+  // Wait for every outstanding call to return. Deliberately unbounded: if a
+  // call is stalled when the window ends, how long it stalls for is the result.
+  // Stop ends the wait.
+  const drainInFlight = async (live: () => boolean) => {
+    while (live() && inFlightRef.current > 0) {
+      await wait(DRAIN_POLL_MS);
     }
   };
 
-  const wait = (ms: number) =>
-    new Promise((resolve) => setTimeout(resolve, ms));
+  // Settlement on its own clock, independent of the samples. The exit adds its
+  // value to pending_out, so settlement is that addition going away again, and
+  // the level before the exit is the reference point. pending_out has to be
+  // seen RISING first: the balance lags the exit call by a poll, so without
+  // that the first reading still shows the pre-exit level and would count as an
+  // instant settlement.
+  //
+  // A control run has no settlement to find but still polls, so that both
+  // wallets make the same background calls and their timelines stay comparable.
+  const watchSettlement = async (live: () => boolean) => {
+    let sawRise = false;
+
+    while (live() && (control || settledRef.current === 0)) {
+      // Not awaited: the watcher's cadence must not depend on how long a
+      // balance refresh takes.
+      void refresh().catch(() => undefined);
+      await wait(SETTLE_POLL_MS);
+
+      if (!live()) {
+        return;
+      }
+
+      if (control) {
+        continue;
+      }
+
+      const out = pendingOutSat(balanceRef.current);
+      if (out > pendingOutBeforeRef.current) {
+        sawRise = true;
+      } else if (sawRise) {
+        settledRef.current = Date.now();
+        setSettledAt(settledRef.current);
+      }
+    }
+  };
 
   const run = async () => {
     const runId = runIdRef.current + 1;
     runIdRef.current = runId;
     const live = () => runIdRef.current === runId;
+    // Stop bumps runId, which ends everything. A run that ends on its own does
+    // not, so the watcher needs this too — otherwise a control run, which never
+    // sees a settlement, would keep polling the balance after the run is over.
+    let finished = false;
 
     setSamples([]);
     setJoinAt(0);
@@ -378,15 +495,23 @@ export function LockProbeScreen({
     logStoreRef.current = [];
     logGapsRef.current = 0;
     lastLogKeyRef.current = null;
+    inFlightRef.current = 0;
+    maxInFlightRef.current = 0;
+    sampleIdRef.current = 0;
+    skippedRef.current = 0;
+    settledRef.current = 0;
 
-    // Baseline: what does receive cost when nothing else is happening?
+    // Baseline: what does receive cost when nothing else is happening? Drained
+    // between calls, so "nothing else in flight" stays literally true — the
+    // in-round samples are the ones meant to overlap.
     for (let i = 0; i < BASELINE_SAMPLES && live(); i += 1) {
-      const sample = await probeOnce();
+      dispatch(live);
+      await drainInFlight(live);
+
       if (!live()) {
         return;
       }
 
-      setSamples((prev) => [...prev, sample]);
       await wait(cfg.intervalMs);
     }
 
@@ -394,13 +519,13 @@ export function LockProbeScreen({
       return;
     }
 
-    // The exit adds its value to pending_out. Settlement is that addition
-    // going away again, so the level before the exit is the reference point.
-    const pendingOutBefore = pendingOutSat(balanceRef.current);
+    pendingOutBeforeRef.current = pendingOutSat(balanceRef.current);
 
     const startedAt = Date.now();
     setJoinAt(startedAt);
     setPhase('probing');
+
+    void watchSettlement(() => live() && !finished);
 
     if (control) {
       // No round, no exit, nothing spent. Everything below still runs, so the
@@ -422,42 +547,31 @@ export function LockProbeScreen({
         .catch((e) => setJoinNote(`Exit call failed: ${errorMessage(e)}`));
     }
 
-    // pending_out has to be seen RISING before a fall can mean anything. The
-    // balance lags the exit call by a poll, so without this the first reading
-    // still shows the pre-exit level and would count as an instant settlement.
-    let sawRise = false;
-    let settled = 0;
-
+    // Fixed cadence, measured start to start. Nothing here awaits a call, so a
+    // stalled invoice does not hold up the next one.
     while (live() && Date.now() - startedAt < cfg.capMs) {
       // Stop once the round has executed and the tail has been collected. The
       // tail is the point of long mode: latency AFTER settlement is what says
       // whether the wallet was held during the round or merely after it.
-      if (cfg.tailMs > 0 && settled > 0 && Date.now() - settled >= cfg.tailMs) {
+      if (
+        cfg.tailMs > 0 &&
+        settledRef.current > 0 &&
+        Date.now() - settledRef.current >= cfg.tailMs
+      ) {
         break;
       }
 
-      const sample = await probeOnce();
-      if (!live()) {
-        return;
-      }
-
-      setSamples((prev) => [...prev, sample]);
-
-      if (!control) {
-        const out = pendingOutSat(balanceRef.current);
-        if (out > pendingOutBefore) {
-          sawRise = true;
-        } else if (sawRise && settled === 0) {
-          settled = Date.now();
-          setSettledAt(settled);
-        }
-      }
-
-      // Refresh without awaiting: the balance must stay current for the check
-      // above, but blocking the probe on it would distort the interval.
-      void refresh().catch(() => undefined);
+      dispatch(live);
       await wait(cfg.intervalMs);
     }
+
+    if (!live()) {
+      return;
+    }
+
+    setPhase('draining');
+    await drainInFlight(live);
+    finished = true;
 
     if (live()) {
       setPhase('done');
@@ -484,6 +598,20 @@ export function LockProbeScreen({
     setConfirm(true);
   };
 
+  // Tick the clock while a run is live so outstanding calls show their elapsed
+  // time. Without it a ten-minute stall renders as a still screen, which is
+  // indistinguishable from a crashed probe.
+  useEffect(() => {
+    if (!running) {
+      return;
+    }
+
+    setNowMs(Date.now());
+    const handle = setInterval(() => setNowMs(Date.now()), CLOCK_MS);
+
+    return () => clearInterval(handle);
+  }, [running]);
+
   // Publish the whole run on the global object so it can be pulled out of the
   // JS runtime over the Metro debugger. A 15 minute run produces far more
   // timing and log data than is readable by scrolling a phone screen, and
@@ -492,24 +620,58 @@ export function LockProbeScreen({
   useEffect(() => {
     (globalThis as unknown as Record<string, unknown>).__l2probe = {
       mode,
+      // Recorded because a control run and a round run are read side by side,
+      // and the two objects are otherwise the same shape.
+      control,
       phase,
       joinAt,
       settledAt,
       joinNote,
       samples,
+      // Enough to reconstruct the schedule without reading this file.
+      intervalMs: cfg.intervalMs,
+      maxInFlight: MAX_IN_FLIGHT,
+      settlePollMs: SETTLE_POLL_MS,
+      maxInFlightSeen: maxInFlightRef.current,
+      skipped: skippedRef.current,
       logs: logStoreRef.current,
       logGaps: logGapsRef.current,
     };
-  }, [mode, phase, joinAt, settledAt, joinNote, samples]);
+  }, [mode, control, cfg.intervalMs, phase, joinAt, settledAt, joinNote, samples]);
+
+  // An outstanding call has no duration yet, so it counts as the time it has
+  // been running. A call that has hung for five minutes is the finding, and
+  // waiting for it to return before saying so would hide it.
+  const clock = running && nowMs > 0 ? nowMs : Date.now();
+  const took = (s: Sample) => s.ms ?? Math.max(0, clock - s.t);
 
   // Split on joinAt rather than on array position: the baseline count is a
   // constant today, but a cancelled baseline would otherwise mislabel rows.
   const baseline = samples.filter((s) => joinAt === 0 || s.t < joinAt);
   const during = samples.filter((s) => joinAt > 0 && s.t >= joinAt);
-  const worstBaseline = baseline.reduce((m, s) => Math.max(m, s.ms), 0);
-  const worstDuring = during.reduce((m, s) => Math.max(m, s.ms), 0);
-  const failedDuring = during.filter((s) => !s.ok).length;
-  const blocked = worstDuring >= FAIL_THRESHOLD_MS || failedDuring > 0;
+  const worstBaseline = baseline.reduce((m, s) => Math.max(m, took(s)), 0);
+  const worstDuring = during.reduce((m, s) => Math.max(m, took(s)), 0);
+  const failedDuring = during.filter((s) => s.ok === false).length;
+
+  // A stall is what the run is hunting: a call over the threshold, or one that
+  // failed outright. Both are counted while still outstanding.
+  const stalls = during.filter(
+    (s) => took(s) >= FAIL_THRESHOLD_MS || s.ok === false,
+  );
+  const blocked = stalls.length > 0;
+
+  // The discrimination this probe exists for. Of the calls that started while
+  // another call was stalled, how many were served normally? Some means the
+  // wallet kept answering and one call lost its response. None means every
+  // receive in that window was affected, which is the bark shape. And no
+  // overlapping calls at all means this run cannot tell the two apart, which
+  // has to be said rather than left to look like a pass.
+  const overlapping = during.filter((s) =>
+    stalls.some((st) => st.id !== s.id && s.t >= st.t && s.t <= st.t + took(st)),
+  );
+  const servedDuringStall = overlapping.filter(
+    (s) => s.ok === true && took(s) < FAIL_THRESHOLD_MS,
+  );
   const verdictColor = blocked ? palette.bad : palette.good;
   // The first sample at or after settlement, so the table can mark where the
   // round actually executed rather than leaving it to be inferred from a time.
@@ -535,6 +697,13 @@ export function LockProbeScreen({
           an invoice every {cfg.intervalMs / 1000} seconds. It takes{' '}
           {BASELINE_SAMPLES} idle readings first, because a slow call proves
           nothing without knowing what normal costs.
+        </Text>
+        <Text style={styles.intro}>
+          Calls go out on the clock and are not waited for, up to{' '}
+          {MAX_IN_FLIGHT} at once, so a call that hangs does not stop the next
+          one. That is what separates the two ways receive can fail: if a call
+          stalls and the calls started during it are still served, one response
+          was lost. If they all stall, the wallet itself was held.
         </Text>
         <View style={styles.modeRow}>
           <Text style={styles.modeLabel}>Role</Text>
@@ -635,7 +804,7 @@ export function LockProbeScreen({
             {control ? null : 'This spends the selected VTXO and creates up to '}
             {control
               ? null
-              : `${Math.ceil(cfg.capMs / cfg.intervalMs) + BASELINE_SAMPLES} unpaid invoices, each a real activity entry memoed "L2 lock probe". Expect fewer: the interval is measured from the end of each call, and long mode stops as soon as the round settles. The invoices cost nothing. The exit does.`}
+              : `${Math.ceil(cfg.capMs / cfg.intervalMs) + BASELINE_SAMPLES} unpaid invoices, each a real activity entry memoed "L2 lock probe". Long mode usually stops earlier, as soon as the round settles. The invoices cost nothing. The exit does.`}
           </Text>
         </View>
         {error ? <InlineError message={error} /> : null}
@@ -678,11 +847,20 @@ export function LockProbeScreen({
                 {blocked
                   ? `Worst call during the round took ${(worstDuring / 1000).toFixed(1)}s${
                       failedDuring > 0 ? `, and ${failedDuring} failed outright` : ''
-                    }, against ${(worstBaseline / 1000).toFixed(1)}s idle. This is the bark failure.`
+                    }, against ${(worstBaseline / 1000).toFixed(1)}s idle.`
                   : `Worst call during the round took ${(worstDuring / 1000).toFixed(1)}s, against ${(worstBaseline / 1000).toFixed(1)}s idle. No call came near the ${FAIL_THRESHOLD_MS / 1000}s threshold.`}
-                {settledAt > 0
-                  ? ' The round executed inside the window, so this covers the round running and not only the wait for it.'
-                  : ' The exit never settled inside the window, so this covers waiting for a round, not running one. Do not quote it as the whole of L2.'}
+                {blocked
+                  ? overlapping.length === 0
+                    ? ' No other call was in flight while it stalled, so this run cannot say whether the wallet was held or one response was lost.'
+                    : servedDuringStall.length > 0
+                      ? ` ${servedDuringStall.length} of ${overlapping.length} calls that started during the stall were served normally, so the wallet kept creating invoices throughout: this was a lost response on one call, not a wallet-wide lock.`
+                      : ` All ${overlapping.length} calls that started during the stall were affected too, so receive was blocked wallet-wide. This is the bark failure.`
+                  : ''}
+                {control
+                  ? ' Control run: no round was joined, so this measures receive with nothing of this wallet’s in flight.'
+                  : settledAt > 0
+                    ? ' The round executed inside the window, so this covers the round running and not only the wait for it.'
+                    : ' The exit never settled inside the window, so this covers waiting for a round, not running one. Do not quote it as the whole of L2.'}
               </Text>
             </View>
           ) : null}
@@ -700,15 +878,31 @@ export function LockProbeScreen({
               label="Calls"
               value={`${baseline.length} idle, ${during.length} in round`}
             />
+            <SummaryRow
+              label="Concurrency"
+              value={`${maxInFlightRef.current} max in flight${
+                skippedRef.current > 0
+                  ? `, ${skippedRef.current} slots skipped at the cap`
+                  : ''
+              }`}
+            />
+            {stalls.length > 0 ? (
+              <SummaryRow
+                label="Served during stall"
+                value={`${servedDuringStall.length} of ${overlapping.length} overlapping calls`}
+              />
+            ) : null}
             {joinNote ? <SummaryRow label="Round join" value={joinNote} /> : null}
             <SummaryRow
               label="Round settled"
               value={
-                settledAt > 0
-                  ? `+${((settledAt - joinAt) / 1000).toFixed(0)}s after join`
-                  : running
-                    ? 'waiting'
-                    : 'not observed'
+                control
+                  ? 'no round joined'
+                  : settledAt > 0
+                    ? `+${((settledAt - joinAt) / 1000).toFixed(0)}s after join, ±${SETTLE_POLL_MS / 1000}s`
+                    : running
+                      ? 'waiting'
+                      : 'not observed'
               }
             />
             <SummaryRow
@@ -727,12 +921,12 @@ export function LockProbeScreen({
           {samples.map((s) => {
             const isBaseline = joinAt === 0 || s.t < joinAt;
             const at = joinAt === 0 ? 0 : (s.t - joinAt) / 1000;
-            const slow = s.ms >= FAIL_THRESHOLD_MS;
-            const isSettled = settledSample?.t === s.t;
+            const slow = took(s) >= FAIL_THRESHOLD_MS;
+            const isSettled = settledSample?.id === s.id;
 
             return (
               <View
-                key={s.t}
+                key={s.id}
                 style={[
                   styles.row,
                   isBaseline && styles.rowBaseline,
@@ -749,18 +943,23 @@ export function LockProbeScreen({
                     slow && { color: palette.bad },
                   ]}
                 >
-                  {s.ms} ms
+                  {took(s)} ms
                 </Text>
                 <Text
                   style={[
                     styles.cell,
                     styles.colResult,
-                    !s.ok && { color: palette.bad },
+                    s.ok === false && { color: palette.bad },
                   ]}
                   numberOfLines={1}
                 >
                   {isSettled ? 'settled — ' : ''}
-                  {s.ok ? s.detail : `failed: ${s.detail}`}
+                  {s.overlap > 0 ? `${s.overlap} in flight — ` : ''}
+                  {s.ok === null
+                    ? 'outstanding'
+                    : s.ok
+                      ? s.detail
+                      : `failed: ${s.detail}`}
                 </Text>
               </View>
             );
